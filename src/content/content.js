@@ -1,0 +1,663 @@
+/*
+ * Content script (top frame). Renders the in-page overlay, tracks the inputs
+ * that signal "screenshot-worthy moment", coordinates hiding the overlay during
+ * a capture, and shows live transcript + capture toasts.
+ *
+ * Loaded after protocol.js, overlay-style.js, dom-descriptor.js, gesture.js, so
+ * it can use SCF, SCF_OVERLAY_CSS, SCF_DOM, SCF_GESTURE from the shared scope.
+ */
+(function () {
+  'use strict';
+  if (window.__scfContentLoaded) return;
+  window.__scfContentLoaded = true;
+
+  const { MSG, TRIGGER } = self.SCF;
+  const gesture = self.SCF_GESTURE;
+  const dom = self.SCF_DOM;
+  const CSS = self.SCF_OVERLAY_CSS;
+
+  const DEFAULT_TRIGGERS = {
+    start: true, navigation: true, route: true, click: true, selection: true,
+    circle: true, dwell: true, scroll: true, heartbeat: true,
+  };
+  const cfg = {
+    showOverlay: true,
+    clickCaptureDelayMs: 150,
+    scrollIdleMs: 500,
+    scrollMinDeltaPx: 200,
+    dwellMs: 400,
+    dwellMinMovePx: 120,
+    circleMinPathPx: 320,
+    circleRatio: 3.2,
+    triggers: Object.assign({}, DEFAULT_TRIGGERS),
+  };
+
+  let recording = false;
+  let startedAt = 0;
+
+  // overlay refs
+  let hostEl = null;
+  let panelEl = null;
+  let textEl = null;
+  let timerEl = null;
+  let shotsEl = null;
+  let miniEl = null;
+  let timerInt = null;
+
+  // overlay UI state
+  let shotCount = 0;
+  let minimized = false;
+  let overlayPos = null; // {x,y} top-left in viewport px; null = default bottom-center
+  let dragging = false;
+
+  // transcript display
+  let finalText = '';
+  let interimText = '';
+
+  // input-tracking state
+  const listeners = [];
+  const moveBuf = [];
+  let lastMoveProcessed = 0;
+  let lastMovePoint = null;
+  let movedAccum = 0;
+  let dwellTimer = null;
+  let lastCircleAt = 0;
+  let lastDwellAt = 0;
+  let scrollIdleTimer = null;
+  let lastScrollCaptureY = 0;
+  let lastSelectionText = '';
+
+  // route detection
+  let origPush = null;
+  let origReplace = null;
+  let routeTimer = null;
+  let lastRouteUrl = location.href;
+
+  // speech recognition (runs here in the page context — Web Speech does not work
+  // inside an MV3 offscreen document)
+  let recognition = null;
+  let recWant = false;
+  let recRunning = false;
+  let recLang = 'en-US';
+  let recRestartTimer = null;
+  let micErrorMsg = '';
+
+  // keepalive port so the service worker isn't evicted during quiet stretches
+  let kaPort = null;
+  let kaTimer = null;
+
+  const now = () => performance.now();
+
+  function send(msg) {
+    try {
+      chrome.runtime.sendMessage(msg, () => void chrome.runtime.lastError);
+    } catch (e) {
+      /* SW not ready */
+    }
+  }
+  function requestCapture(trigger, meta) {
+    send({ type: MSG.REQUEST_CAPTURE, trigger, meta: meta || {} });
+  }
+  function withPage(meta) {
+    return Object.assign({ url: location.href, title: document.title }, meta || {});
+  }
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"]/g, (c) =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])
+    );
+  }
+
+  // ----------------------------------------------------------------- overlay
+
+  function buildOverlay() {
+    if (hostEl) return;
+    hostEl = document.createElement('div');
+    hostEl.id = '__scf_overlay_host';
+    hostEl.style.cssText =
+      'all:initial;position:fixed;left:0;top:0;width:0;height:0;z-index:2147483647;';
+    const shadow = hostEl.attachShadow({ mode: 'open' });
+    const style = document.createElement('style');
+    style.textContent = CSS;
+    shadow.appendChild(style);
+
+    panelEl = document.createElement('div');
+    panelEl.className = 'panel';
+
+    // grip (drag handle): REC dot + timer + shots count
+    const grip = document.createElement('div');
+    grip.className = 'grip';
+    grip.title = 'Drag to move';
+    const dot = document.createElement('div');
+    dot.className = 'dot';
+    const recLabel = document.createElement('span');
+    recLabel.className = 'reclabel';
+    recLabel.textContent = 'REC';
+    timerEl = document.createElement('span');
+    timerEl.className = 'timer';
+    timerEl.textContent = '0:00';
+    shotsEl = document.createElement('span');
+    shotsEl.className = 'shots';
+    shotsEl.textContent = '📸 0';
+    grip.append(dot, recLabel, timerEl, shotsEl);
+
+    const sep = document.createElement('div');
+    sep.className = 'sep';
+
+    textEl = document.createElement('div');
+    textEl.className = 'text';
+
+    const btns = document.createElement('div');
+    btns.className = 'btns';
+    const shoot = document.createElement('button');
+    shoot.className = 'shoot';
+    shoot.textContent = '📸';
+    shoot.title = 'Force a screenshot now';
+    shoot.addEventListener('click', () => requestCapture(TRIGGER.FORCED, withPage({})));
+    const mini = document.createElement('button');
+    mini.className = 'mini';
+    mini.textContent = '–';
+    mini.title = 'Minimize';
+    mini.addEventListener('click', () => setMinimized(!minimized));
+    miniEl = mini;
+    const stop = document.createElement('button');
+    stop.className = 'stop';
+    stop.textContent = '⏹';
+    stop.title = 'Stop recording';
+    stop.addEventListener('click', () => send({ type: MSG.STOP_RECORDING }));
+    btns.append(shoot, mini, stop);
+
+    panelEl.append(grip, sep, textEl, btns);
+    shadow.appendChild(panelEl);
+    (document.documentElement || document.body).appendChild(hostEl);
+
+    enableDrag(grip);
+    // restore saved position + minimized state, then apply
+    try {
+      chrome.storage.local.get(['overlayPos', 'overlayMin'], (got) => {
+        overlayPos = got && got.overlayPos ? got.overlayPos : null;
+        applyPosition();
+        setMinimized(!!(got && got.overlayMin), true);
+      });
+    } catch (e) {
+      applyPosition();
+    }
+    applyPosition();
+    updateShots();
+    renderTranscript();
+  }
+
+  function destroyOverlay() {
+    if (hostEl && hostEl.parentNode) hostEl.parentNode.removeChild(hostEl);
+    hostEl = panelEl = textEl = timerEl = shotsEl = miniEl = null;
+  }
+
+  function panelSize() {
+    if (!panelEl) return { w: 360, h: 56 };
+    const r = panelEl.getBoundingClientRect();
+    return { w: r.width || 360, h: r.height || 56 };
+  }
+
+  function defaultPos() {
+    const { w, h } = panelSize();
+    return {
+      x: Math.max(8, Math.round((window.innerWidth - w) / 2)),
+      y: Math.max(8, window.innerHeight - h - 22),
+    };
+  }
+
+  function clampPos(p) {
+    const { w, h } = panelSize();
+    return {
+      x: Math.min(Math.max(8, p.x), Math.max(8, window.innerWidth - w - 8)),
+      y: Math.min(Math.max(8, p.y), Math.max(8, window.innerHeight - h - 8)),
+    };
+  }
+
+  function applyPosition() {
+    if (!panelEl) return;
+    const p = clampPos(overlayPos || defaultPos());
+    panelEl.style.left = p.x + 'px';
+    panelEl.style.top = p.y + 'px';
+  }
+
+  function setMinimized(on, skipSave) {
+    minimized = !!on;
+    if (panelEl) panelEl.classList.toggle('minimized', minimized);
+    if (miniEl) {
+      miniEl.textContent = minimized ? '+' : '–';
+      miniEl.title = minimized ? 'Expand' : 'Minimize';
+    }
+    // re-clamp since the size changed
+    requestAnimationFrame(applyPosition);
+    if (!skipSave) {
+      try {
+        chrome.storage.local.set({ overlayMin: minimized });
+      } catch (e) {
+        /* ignore */
+      }
+    }
+  }
+
+  function updateShots() {
+    if (shotsEl) shotsEl.textContent = '📸 ' + shotCount;
+  }
+
+  function enableDrag(handle) {
+    handle.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0 || !panelEl) return;
+      dragging = true;
+      const start = panelEl.getBoundingClientRect();
+      const offX = e.clientX - start.left;
+      const offY = e.clientY - start.top;
+      try {
+        handle.setPointerCapture(e.pointerId);
+      } catch (_) {
+        /* ignore */
+      }
+      const onMove = (ev) => {
+        if (!dragging) return;
+        overlayPos = clampPos({ x: ev.clientX - offX, y: ev.clientY - offY });
+        panelEl.style.left = overlayPos.x + 'px';
+        panelEl.style.top = overlayPos.y + 'px';
+      };
+      const onUp = (ev) => {
+        dragging = false;
+        handle.removeEventListener('pointermove', onMove);
+        handle.removeEventListener('pointerup', onUp);
+        try {
+          handle.releasePointerCapture(ev.pointerId);
+        } catch (_) {
+          /* ignore */
+        }
+        if (overlayPos) {
+          try {
+            chrome.storage.local.set({ overlayPos });
+          } catch (_) {
+            /* ignore */
+          }
+        }
+      };
+      handle.addEventListener('pointermove', onMove);
+      handle.addEventListener('pointerup', onUp);
+      e.preventDefault();
+    });
+  }
+
+  function renderTranscript() {
+    if (!textEl) return;
+    if (micErrorMsg) {
+      textEl.innerHTML = '<span class="micerror">' + escapeHtml(micErrorMsg) + '</span>';
+      return;
+    }
+    if (!finalText && !interimText) {
+      textEl.innerHTML = '<span class="placeholder">Listening… speak your feedback</span>';
+      return;
+    }
+    const tail = finalText.slice(-280);
+    textEl.innerHTML =
+      escapeHtml(tail) +
+      (interimText ? ' <span class="interim">' + escapeHtml(interimText) + '</span>' : '');
+  }
+
+  function startTimer() {
+    stopTimer();
+    timerInt = setInterval(() => {
+      if (!timerEl) return;
+      const s = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+      timerEl.textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+    }, 500);
+  }
+  function stopTimer() {
+    if (timerInt) clearInterval(timerInt);
+    timerInt = null;
+  }
+
+  // --------------------------------------------------------------- tracking
+
+  function isOurs(e) {
+    if (!hostEl) return false;
+    if (e.target === hostEl) return true;
+    const path = e.composedPath ? e.composedPath() : [];
+    return path.indexOf(hostEl) !== -1;
+  }
+
+  function addL(target, type, fn, opts) {
+    target.addEventListener(type, fn, opts);
+    listeners.push([target, type, fn, opts]);
+  }
+
+  function onMouseDown(e) {
+    if (!recording || isOurs(e) || e.button !== 0 || !cfg.triggers.click) return;
+    const el = dom.describe(e.target) || dom.describeAtPoint(e.clientX, e.clientY, hostEl);
+    setTimeout(() => {
+      if (recording) requestCapture(TRIGGER.CLICK, withPage({ element: el }));
+    }, cfg.clickCaptureDelayMs);
+  }
+
+  function onMouseUp(e) {
+    if (!recording || isOurs(e) || !cfg.triggers.selection) return;
+    setTimeout(() => {
+      const sel = window.getSelection();
+      const txt = sel ? String(sel).trim() : '';
+      if (txt && txt.length >= 2 && txt !== lastSelectionText) {
+        lastSelectionText = txt;
+        let el = null;
+        try {
+          const node = sel.anchorNode;
+          el = dom.describe(node && node.nodeType === 1 ? node : node && node.parentElement);
+        } catch (_) {
+          /* ignore */
+        }
+        requestCapture(TRIGGER.SELECTION, withPage({ selectionText: txt.slice(0, 400), element: el }));
+      }
+    }, 10);
+  }
+
+  function scheduleDwell() {
+    if (!cfg.triggers.dwell) return;
+    clearTimeout(dwellTimer);
+    dwellTimer = setTimeout(() => {
+      if (!recording) return;
+      const t = now();
+      if (t - lastDwellAt < 1200) return;
+      if (movedAccum >= cfg.dwellMinMovePx) {
+        lastDwellAt = t;
+        movedAccum = 0;
+        const el = lastMovePoint ? dom.describeAtPoint(lastMovePoint.x, lastMovePoint.y, hostEl) : null;
+        requestCapture(TRIGGER.DWELL, withPage({ element: el }));
+      }
+    }, cfg.dwellMs);
+  }
+
+  function onMouseMove(e) {
+    if (!recording || dragging) return;
+    const t = now();
+    if (lastMovePoint) {
+      movedAccum += Math.hypot(e.clientX - lastMovePoint.x, e.clientY - lastMovePoint.y);
+    }
+    lastMovePoint = { x: e.clientX, y: e.clientY };
+
+    if (t - lastMoveProcessed >= 30) {
+      lastMoveProcessed = t;
+      moveBuf.push({ x: e.clientX, y: e.clientY, t });
+      const cutoff = t - 1200;
+      while (moveBuf.length && moveBuf[0].t < cutoff) moveBuf.shift();
+
+      if (cfg.triggers.circle && moveBuf.length >= 6 && t - lastCircleAt > 1500) {
+        const g = gesture.analyzeGesture(moveBuf, cfg);
+        if (g.isCircle) {
+          lastCircleAt = t;
+          movedAccum = 0;
+          const el = dom.describeAtPoint(e.clientX, e.clientY, hostEl);
+          requestCapture(TRIGGER.CIRCLE, withPage({ element: el }));
+        }
+      }
+    }
+    scheduleDwell();
+  }
+
+  function onScroll() {
+    if (!recording || !cfg.triggers.scroll) return;
+    clearTimeout(scrollIdleTimer);
+    scrollIdleTimer = setTimeout(() => {
+      if (!recording) return;
+      const y = window.scrollY || window.pageYOffset || 0;
+      if (Math.abs(y - lastScrollCaptureY) >= cfg.scrollMinDeltaPx) {
+        lastScrollCaptureY = y;
+        requestCapture(TRIGGER.SCROLL, withPage({ scrollY: Math.round(y) }));
+      }
+    }, cfg.scrollIdleMs);
+  }
+
+  function startTracking() {
+    addL(document, 'mousedown', onMouseDown, true);
+    addL(document, 'mouseup', onMouseUp, true);
+    addL(document, 'mousemove', onMouseMove, { passive: true });
+    addL(window, 'scroll', onScroll, { passive: true });
+  }
+  function stopTracking() {
+    for (const [target, type, fn, opts] of listeners) {
+      try {
+        target.removeEventListener(type, fn, opts);
+      } catch (_) {
+        /* ignore */
+      }
+    }
+    listeners.length = 0;
+    clearTimeout(dwellTimer);
+    clearTimeout(scrollIdleTimer);
+    moveBuf.length = 0;
+    lastMovePoint = null;
+    movedAccum = 0;
+  }
+
+  // ----------------------------------------------------------- route changes
+
+  function onRoute() {
+    clearTimeout(routeTimer);
+    routeTimer = setTimeout(() => {
+      if (!recording || location.href === lastRouteUrl) return;
+      lastRouteUrl = location.href;
+      send({ type: MSG.ROUTE_CHANGED, url: location.href, title: document.title });
+      setTimeout(() => {
+        if (recording && cfg.triggers.route) requestCapture(TRIGGER.ROUTE, withPage({}));
+      }, 450);
+    }, 250);
+  }
+
+  function patchHistory() {
+    if (origPush) return;
+    origPush = history.pushState;
+    origReplace = history.replaceState;
+    try {
+      history.pushState = function () {
+        const r = origPush.apply(this, arguments);
+        onRoute();
+        return r;
+      };
+      history.replaceState = function () {
+        const r = origReplace.apply(this, arguments);
+        onRoute();
+        return r;
+      };
+    } catch (_) {
+      /* some pages freeze history */
+    }
+    window.addEventListener('popstate', onRoute);
+    window.addEventListener('hashchange', onRoute);
+  }
+
+  function unpatchHistory() {
+    try {
+      if (origPush) history.pushState = origPush;
+      if (origReplace) history.replaceState = origReplace;
+    } catch (_) {
+      /* ignore */
+    }
+    origPush = origReplace = null;
+    window.removeEventListener('popstate', onRoute);
+    window.removeEventListener('hashchange', onRoute);
+  }
+
+  // ------------------------------------------------------- speech recognition
+
+  function startRecognition() {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) {
+      micErrorMsg = '⚠️ Speech recognition is not available in this browser.';
+      renderTranscript();
+      return;
+    }
+    recWant = true;
+    if (recRunning) return;
+    micErrorMsg = '';
+    recognition = new SR();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = recLang;
+    recognition.onstart = () => {
+      recRunning = true;
+    };
+    recognition.onresult = (event) => {
+      let interim = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const res = event.results[i];
+        const txt = res[0] && res[0].transcript ? res[0].transcript : '';
+        if (res.isFinal) {
+          const f = txt.trim();
+          if (f) {
+            finalText += (finalText ? ' ' : '') + f;
+            // persist the finalized segment for the export
+            send({ type: MSG.TRANSCRIPT_SEGMENT, final: true, text: f, t: Date.now() });
+          }
+        } else {
+          interim += txt;
+        }
+      }
+      interimText = interim.trim();
+      renderTranscript();
+    };
+    recognition.onerror = (e) => {
+      const err = e && e.error ? e.error : 'unknown';
+      if (err === 'not-allowed' || err === 'service-not-allowed') {
+        recWant = false;
+        micErrorMsg = '⚠️ Microphone blocked for this site — click the 🎤 / site icon in the address bar, allow it, then restart recording.';
+        renderTranscript();
+        send({ type: MSG.TRANSCRIBE_ERROR, error: err });
+      }
+      // 'no-speech' / 'network' / 'aborted' are handled by onend auto-restart
+    };
+    recognition.onend = () => {
+      recRunning = false;
+      if (recWant) {
+        clearTimeout(recRestartTimer);
+        recRestartTimer = setTimeout(() => {
+          if (!recWant) return;
+          try {
+            recognition.start();
+          } catch (e) {
+            try {
+              startRecognition();
+            } catch (e2) {
+              /* give up until next session */
+            }
+          }
+        }, 250);
+      }
+    };
+    try {
+      recognition.start();
+    } catch (e) {
+      /* start() throws if called while already starting */
+    }
+  }
+
+  function stopRecognition() {
+    recWant = false;
+    clearTimeout(recRestartTimer);
+    if (recognition) {
+      try {
+        recognition.stop();
+      } catch (e) {
+        /* ignore */
+      }
+    }
+  }
+
+  // ----------------------------------------------------------------- keepalive
+
+  function startKeepalive() {
+    try {
+      kaPort = chrome.runtime.connect({ name: 'keepalive' });
+      kaPort.onDisconnect.addListener(() => {
+        void chrome.runtime.lastError;
+        kaPort = null;
+      });
+    } catch (e) {
+      kaPort = null;
+    }
+    clearInterval(kaTimer);
+    kaTimer = setInterval(() => {
+      try {
+        if (kaPort) kaPort.postMessage({ t: Date.now() });
+        else if (recording) startKeepalive();
+      } catch (e) {
+        kaPort = null;
+      }
+    }, 20000);
+  }
+
+  function stopKeepalive() {
+    clearInterval(kaTimer);
+    kaTimer = null;
+    if (kaPort) {
+      try {
+        kaPort.disconnect();
+      } catch (e) {
+        /* ignore */
+      }
+      kaPort = null;
+    }
+  }
+
+  // --------------------------------------------------------------- sessions
+
+  function onSessionStarted(msg) {
+    if (msg.settings) {
+      Object.assign(cfg, msg.settings);
+      cfg.triggers = Object.assign({}, DEFAULT_TRIGGERS, msg.settings.triggers || {});
+    }
+    recording = true;
+    startedAt = msg.startedAt || Date.now();
+    finalText = '';
+    interimText = '';
+    micErrorMsg = '';
+    shotCount = 0;
+    lastSelectionText = '';
+    lastScrollCaptureY = window.scrollY || 0;
+    lastRouteUrl = location.href;
+    recLang = (cfg.language || 'en-US');
+    if (cfg.showOverlay !== false) buildOverlay();
+    startTimer();
+    startTracking();
+    patchHistory();
+    startRecognition();
+    startKeepalive();
+    send({ type: MSG.PAGE_INFO, url: location.href, title: document.title });
+  }
+
+  function onSessionStopped() {
+    recording = false;
+    stopRecognition();
+    stopKeepalive();
+    stopTracking();
+    unpatchHistory();
+    stopTimer();
+    destroyOverlay();
+    finalText = '';
+    interimText = '';
+    micErrorMsg = '';
+  }
+
+  chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    if (!msg || !msg.type) return;
+    switch (msg.type) {
+      case MSG.SESSION_STARTED:
+        onSessionStarted(msg);
+        break;
+      case MSG.SESSION_STOPPED:
+        onSessionStopped();
+        break;
+      case MSG.SCREENSHOT_TOAST:
+        // no flashing toast — just bump the static counter in the bar
+        shotCount = msg.seq || shotCount + 1;
+        updateShots();
+        break;
+      default:
+        break;
+    }
+  });
+
+  // announce readiness so the SW can re-arm the overlay after a navigation
+  send({ type: MSG.CONTENT_READY });
+})();

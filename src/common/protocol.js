@@ -1,0 +1,71 @@
+/*
+ * Shared message protocol + small constants.
+ * Loaded as a classic script in every context (service worker via importScripts,
+ * content script via the content_scripts list, and pages via <script>).
+ * Attaches a single namespace to globalThis so all realms agree on the strings.
+ */
+(function (root) {
+  'use strict';
+  if (root.SCF) return; // already loaded in this realm
+
+  const MSG = {
+    // content -> service worker
+    CONTENT_READY: 'content_ready',
+    REQUEST_CAPTURE: 'request_capture',
+    PAGE_INFO: 'page_info',
+    ROUTE_CHANGED: 'route_changed',
+    PREPARE_CAPTURE_ACK: 'prepare_capture_ack',
+
+    // service worker -> content
+    SESSION_STARTED: 'session_started',
+    SESSION_STOPPED: 'session_stopped',
+    PREPARE_CAPTURE: 'prepare_capture',
+    CAPTURE_DONE: 'capture_done',
+    TRANSCRIPT_UPDATE: 'transcript_update',
+    SCREENSHOT_TOAST: 'screenshot_toast',
+    STATUS: 'status',
+
+    // popup/options <-> service worker
+    GET_STATE: 'get_state',
+    START_RECORDING: 'start_recording',
+    STOP_RECORDING: 'stop_recording',
+    COPY_LAST: 'copy_last',
+    CHECK_MIC: 'check_mic',
+    OPEN_PERMISSION: 'open_permission',
+    FORCE_SHOT: 'force_shot',
+
+    // service worker <-> offscreen
+    OFFSCREEN_READY: 'offscreen_ready',
+    OFFSCREEN_START: 'offscreen_start',
+    OFFSCREEN_STOP: 'offscreen_stop',
+    TRANSCRIPT_SEGMENT: 'transcript_segment',
+    TRANSCRIBE_ERROR: 'transcribe_error',
+    COPY_TO_CLIPBOARD: 'copy_to_clipboard',
+    KEEPALIVE: 'keepalive',
+  };
+
+  // Screenshot trigger types. Priority triggers bypass the dedup cull.
+  const TRIGGER = {
+    START: 'start',
+    NAVIGATION: 'navigation',
+    ROUTE: 'route',
+    CLICK: 'click',
+    SELECTION: 'selection',
+    CIRCLE: 'circle',
+    DWELL: 'dwell',
+    SCROLL: 'scroll',
+    HEARTBEAT: 'heartbeat',
+    FORCED: 'forced',
+  };
+
+  const PRIORITY_TRIGGERS = new Set([
+    TRIGGER.START,
+    TRIGGER.NAVIGATION,
+    TRIGGER.ROUTE,
+    TRIGGER.SELECTION,
+    TRIGGER.CIRCLE,
+    TRIGGER.FORCED,
+  ]);
+
+  root.SCF = { MSG, TRIGGER, PRIORITY_TRIGGERS };
+})(typeof globalThis !== 'undefined' ? globalThis : self);

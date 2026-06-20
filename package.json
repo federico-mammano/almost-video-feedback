@@ -1,0 +1,13 @@
+{
+  "name": "almost-video-feedback-for-ai",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Chrome extension that records spoken + visual feedback on a web app and hands an AI coding agent a single file of screenshots correlated to what you said and did.",
+  "scripts": {
+    "test": "node test/run.cjs",
+    "verify": "node scripts/verify.cjs",
+    "icons": "node scripts/generate-icons.cjs",
+    "pack": "node scripts/pack.cjs"
+  },
+  "license": "MIT"
+}

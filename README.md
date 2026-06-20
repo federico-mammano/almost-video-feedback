@@ -1,0 +1,175 @@
+# Almost Video Feedback for AI
+
+A Chrome extension (Manifest V3) for recording **spoken + visual feedback** on a web app and
+handing an AI coding agent (Claude Code, etc.) a single file that says exactly what to fix —
+with screenshots correlated to what you said and did.
+
+You hit record, talk through what's wrong while you click / select / scroll / circle the mouse
+around things, and on stop it writes a session bundle to your Downloads folder and copies a
+ready-to-paste prompt (containing the absolute path to `feedback.md`) to your clipboard.
+
+```
+Start ▶  →  talk + point at things  →  Stop ⏹  →  paste into your agent  →  it reads the file and does the work
+```
+
+---
+
+## How it works
+
+- **Transcription** runs in real time via Chrome's built-in **Web Speech API** (no API key, no
+  setup). It runs in the **content script** (the live page context) — Chrome's Web Speech API
+  does not produce results inside an MV3 offscreen document, so the page is the right home for it.
+  A higher-quality remote engine (Deepgram / AssemblyAI / Whisper) can be added later.
+- **Screenshots** are captured at strategically chosen moments and **deduplicated** so the agent
+  isn't drowned in near-identical frames. Capture triggers:
+  - on start, on new page load, and on in-app (SPA) navigation
+  - on click, on text-selection release (the selected text is recorded too)
+  - when you **circle / scribble** the mouse around something, or pause after moving it
+  - after you scroll and stop
+  - a periodic safety-net snapshot
+  - manually — the **hotkey** or the floating **📸 Shot** button
+  - Near-identical frames are culled with a perceptual hash (dHash + Hamming distance). High-intent
+    triggers (start, navigation, selection, circling, manual) are never culled.
+- **Overlay**: a single translucent bar shows the live transcript, elapsed time, a screenshot
+  counter, and Shot / minimize / Stop buttons. It's **draggable** (grab the REC/timer area) and
+  **minimizable** (collapses to a small pill), and its position is remembered. It stays put during
+  captures (no flicker); minimize or move it if you want it out of a screenshot. The canonical
+  "recording" state is also shown in the toolbar badge (a red ●).
+- **Mic meter**: the popup shows a live microphone level so you can confirm audio is being picked up.
+- **Correlation**: everything is one timestamped timeline (speech, screenshots, navigations),
+  persisted to IndexedDB as it happens. On stop, each spoken segment is attached to the nearest
+  screenshot in time and the whole thing is rendered chronologically.
+
+## Output
+
+Written to `Downloads/ai-feedback/session-YYYYMMDD-HHMMSS/`:
+
+```
+feedback.md          # agent-facing: instructions + chronological entries with screenshots
+session.json         # the same data, structured, for programmatic use
+screenshots/0001.png
+screenshots/0002.png
+...
+```
+
+`feedback.md` interleaves, in order: what you did, what you said at that moment, the page URL, the
+clicked/selected element, and the screenshot. The clipboard gets a prompt like:
+
+> I recorded visual + spoken feedback on my web app. Please read the feedback file and address
+> each item. Screenshots are referenced relative to the file, in the same folder.
+>
+> Feedback file: `C:\Users\you\Downloads\ai-feedback\session-…\feedback.md`
+
+Paste that straight into Claude Code.
+
+---
+
+## Install (load unpacked)
+
+1. Open `chrome://extensions`.
+2. Toggle **Developer mode** (top right).
+3. Click **Load unpacked** and select this folder (the one containing `manifest.json`).
+4. Pin the extension so you can see the toolbar button + recording badge.
+
+Requires Chrome 116+.
+
+## Microphone
+
+The first time you start recording on a given site, Chrome shows its standard in-page microphone
+prompt — click **Allow**. The grant is remembered per site, so you only do it once per origin
+(your own app / `localhost` included). If you block it by mistake, re-allow it via the microphone
+icon in the address bar and start again.
+
+## Using it
+
+1. Open the tab you want to review (any normal `http`/`https` page, including `localhost`).
+2. Click the toolbar button → **Start recording** (or press the hotkey).
+3. Talk through your feedback while you interact with the page. A translucent bar at the bottom
+   shows the live transcript and flashes "📸 Screenshot N" when one is captured.
+4. Press the hotkey or the **📸 Shot** button any time you want to force a capture.
+5. Click **Stop** (in the popup or the overlay). The popup pops open showing **"Recording saved"**,
+   the bundle is written, and the agent prompt (with the file path) is copied to your clipboard
+   automatically. The popup also lists your **last 5 recordings** — click one to view it or copy its
+   prompt, or open the full **Recordings** library to view/share any of them.
+
+> **Tip:** clicking the toolbar icon **while recording** stops the recording automatically (the
+> menu opens straight to the saved result). Use the on-page overlay or the hotkey to control a
+> recording without stopping it.
+
+### Hotkeys (default — rebindable at `chrome://extensions/shortcuts`)
+
+| Action | Windows/Linux | macOS |
+|---|---|---|
+| Start / stop recording | `Ctrl+Shift+Y` | `⌘+Shift+Y` |
+| Force a screenshot | `Ctrl+Shift+U` | `⌘+Shift+U` |
+
+### Recordings library & sharing
+
+Click **📁 Recordings** in the popup (or **View & share** after a recording) to open the library.
+Each past session is listed with its date, duration, and counts; expand one to see every screenshot
+with the words you spoke around it and the full transcript.
+
+**Pruning screenshots:** in the expanded view, click any screenshot to select it (shift-click for a
+range, or use **Select all**), then **🗑 Delete selected** to drop the ones you don't want. This
+updates the library copy used for viewing and sharing — the original files already in Downloads are
+left untouched. (Click a screenshot's image to open it full-size.)
+
+Per session you can also:
+
+- **Share** — bundles `feedback.md` + `session.json` + all screenshots into a `.zip` and opens your
+  OS share sheet (email, WhatsApp, etc.) via the Web Share API; if that's unavailable it downloads
+  the zip so you can attach it manually.
+- **Copy prompt** — copies the ready-to-paste agent prompt with the file path.
+- **Delete** — removes it from the library (files already in Downloads are left alone).
+
+The library keeps the most recent 40 sessions (older ones are pruned automatically).
+
+### Settings
+
+Right-click the extension → **Options** (or the popup's **Settings** link) to tune: transcription
+language, which triggers are active, capture format (PNG/JPEG), the dedup aggressiveness, the safety
+cap, and the timing thresholds for scroll/dwell/circle detection.
+
+---
+
+## Limitations
+
+- Can't record `chrome://` pages, the Chrome Web Store, or other extension pages.
+- Web Speech sends audio to Google's servers (it's not truly offline). A private/offline engine is
+  on the roadmap via the swappable transcription interface.
+- Files land in **Downloads** (extensions can't write to arbitrary paths). Writing straight into a
+  project repo would need a native-messaging host or a small local companion app — a future option.
+- Screenshots appear briefly in Chrome's downloads UI as they're written on stop.
+- Recording follows one tab/window; switching to a different tab mid-session is not the intended flow.
+
+## Development
+
+```bash
+npm test       # pure-logic unit tests (image hash, gesture math, exporter)
+npm run verify # manifest references + syntax-check every JS file
+npm run icons  # regenerate the toolbar PNGs
+```
+
+No build step and no dependencies — the `src/` tree loads unpacked as-is.
+
+### Layout
+
+```
+manifest.json
+src/
+  common/      protocol.js (message types), config.js (settings + storage)
+  background/  service-worker.js (orchestrator) + capture, dedup hash, session store (IndexedDB),
+               exporter (feedback.md/json), downloads (write + resolve absolute path)
+  offscreen/   clipboard write (created on stop)
+  content/     overlay UI + Web Speech transcription + input tracking + capture coordination
+  popup/  options/    UI pages
+docs/superpowers/specs/    design spec
+test/        node test runner
+scripts/     icon generator + verifier
+```
+
+## Roadmap
+
+- Pluggable remote transcription (Deepgram / AssemblyAI / Whisper) for higher accuracy + privacy.
+- Optional native-messaging host to drop the bundle directly into a target repo.
+- Smarter screenshot selection (OCR-aware diffing, element-change detection).

@@ -1,0 +1,219 @@
+/*
+ * Tiny dependency-free test runner for the pure-logic modules.
+ * Run: node test/run.cjs
+ */
+'use strict';
+const assert = require('assert');
+const imageHash = require('../src/background/image-hash.js');
+const gesture = require('../src/content/gesture.js');
+const exporter = require('../src/background/exporter.js');
+const zip = require('../src/common/zip.js');
+
+let passed = 0;
+let failed = 0;
+function test(name, fn) {
+  try {
+    fn();
+    passed++;
+    console.log('  ✓ ' + name);
+  } catch (err) {
+    failed++;
+    console.log('  ✗ ' + name);
+    console.log('    ' + (err && err.message ? err.message : err));
+  }
+}
+
+// ---- helpers ----
+function gradientImage(increasing) {
+  const w = imageHash.HASH_W; // 9
+  const h = imageHash.HASH_H; // 8
+  const data = new Uint8ClampedArray(w * h * 4);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const t = x / (w - 1);
+      const v = Math.round((increasing ? t : 1 - t) * 255);
+      const i = (y * w + x) * 4;
+      data[i] = v; data[i + 1] = v; data[i + 2] = v; data[i + 3] = 255;
+    }
+  }
+  return { width: w, height: h, data };
+}
+
+function circlePoints(cx, cy, r, loops, n) {
+  const pts = [];
+  for (let i = 0; i <= n; i++) {
+    const a = (i / n) * Math.PI * 2 * loops;
+    pts.push({ x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) });
+  }
+  return pts;
+}
+
+console.log('image-hash:');
+
+test('bitsToHex maps nibbles', () => {
+  assert.strictEqual(imageHash.bitsToHex('0000'.repeat(16)), '0'.repeat(16));
+  assert.strictEqual(imageHash.bitsToHex('1111'.repeat(16)), 'f'.repeat(16));
+  assert.strictEqual(imageHash.bitsToHex('1010'.repeat(16)), 'a'.repeat(16));
+});
+
+test('dHash of increasing gradient is all zeros', () => {
+  // left darker than right => g1 > g2 is false => 0 bits
+  assert.strictEqual(imageHash.dHash(gradientImage(true)), '0'.repeat(16));
+});
+
+test('dHash of decreasing gradient is all ones', () => {
+  assert.strictEqual(imageHash.dHash(gradientImage(false)), 'f'.repeat(16));
+});
+
+test('hammingDistance: identical = 0, opposite = 64', () => {
+  assert.strictEqual(imageHash.hammingDistance('0'.repeat(16), '0'.repeat(16)), 0);
+  assert.strictEqual(imageHash.hammingDistance('0'.repeat(16), 'f'.repeat(16)), 64);
+});
+
+test('hammingDistance counts single bit', () => {
+  assert.strictEqual(imageHash.hammingDistance('0000000000000001', '0000000000000000'), 1);
+  assert.strictEqual(imageHash.hammingDistance('0000000000000003', '0000000000000000'), 2);
+});
+
+test('hammingDistance mismatched/empty => 64', () => {
+  assert.strictEqual(imageHash.hammingDistance('', 'abc'), 64);
+  assert.strictEqual(imageHash.hammingDistance(null, 'abc'), 64);
+});
+
+test('isDuplicate respects threshold', () => {
+  assert.strictEqual(imageHash.isDuplicate('0000000000000003', '0000000000000000', 6), true);
+  assert.strictEqual(imageHash.isDuplicate('00000000000000ff', '0000000000000000', 6), false); // 8 bits
+});
+
+console.log('gesture:');
+
+test('pathLength of a 3-4-5 segment', () => {
+  assert.strictEqual(gesture.pathLength([{ x: 0, y: 0 }, { x: 3, y: 4 }]), 5);
+  assert.strictEqual(gesture.pathLength([{ x: 1, y: 1 }]), 0);
+});
+
+test('boundingBoxDiagonal', () => {
+  assert.strictEqual(gesture.boundingBoxDiagonal([{ x: 0, y: 0 }, { x: 3, y: 4 }]), 5);
+  assert.strictEqual(gesture.boundingBoxDiagonal([]), 0);
+});
+
+const OPTS = { circleMinPathPx: 320, circleRatio: 3.2 };
+
+test('straight long drag is NOT a circle', () => {
+  const pts = [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 200, y: 0 }, { x: 400, y: 0 }];
+  const r = gesture.analyzeGesture(pts, OPTS);
+  assert.strictEqual(r.isCircle, false);
+  assert.ok(r.ratio < 1.5, 'ratio should be ~1 for a straight line, got ' + r.ratio);
+});
+
+test('tight repeated circling IS a circle', () => {
+  const pts = circlePoints(100, 100, 20, 3, 60);
+  const r = gesture.analyzeGesture(pts, OPTS);
+  assert.ok(r.pathLength >= 320, 'pathLength ' + r.pathLength);
+  assert.ok(r.ratio >= 3.2, 'ratio ' + r.ratio);
+  assert.strictEqual(r.isCircle, true);
+});
+
+test('one small loop is not enough path to trigger', () => {
+  const pts = circlePoints(100, 100, 10, 1, 24); // circumference ~63px
+  const r = gesture.analyzeGesture(pts, OPTS);
+  assert.strictEqual(r.isCircle, false);
+});
+
+console.log('exporter:');
+
+const sampleEvents = [
+  { id: 1, t: 1000, type: 'screenshot', seq: 1, trigger: 'start', url: 'http://app/', title: 'App' },
+  { id: 2, t: 2000, type: 'transcript', final: true, text: 'the save button is broken' },
+  {
+    id: 3, t: 2500, type: 'screenshot', seq: 2, trigger: 'click', url: 'http://app/', title: 'App',
+    element: { tag: 'BUTTON', id: 'save', classes: 'btn primary', text: 'Save' },
+  },
+  { id: 4, t: 60000, type: 'transcript', final: true, text: 'unrelated note far away' },
+];
+const sampleMeta = { startedAt: 1000, endedAt: 61000, startedAtText: '2026-06-20 14:30' };
+
+test('build returns sequential screenshot files', () => {
+  const r = exporter.build(sampleEvents, sampleMeta);
+  assert.strictEqual(r.screenshots.length, 2);
+  assert.strictEqual(r.screenshots[0].file, 'screenshots/0001.png');
+  assert.strictEqual(r.screenshots[1].file, 'screenshots/0002.png');
+});
+
+test('markdown embeds screenshots, quotes, pages, element', () => {
+  const r = exporter.build(sampleEvents, sampleMeta);
+  assert.ok(r.markdown.includes('screenshots/0002.png'), 'image ref');
+  assert.ok(r.markdown.includes('the save button is broken'), 'nearest-screenshot quote');
+  assert.ok(r.markdown.includes('Pages visited'), 'pages section');
+  assert.ok(r.markdown.includes('http://app/'), 'page url');
+  assert.ok(r.markdown.includes('button#save'), 'element selector');
+  assert.ok(r.markdown.includes('Save'), 'element text');
+});
+
+test('far-away transcript becomes a floating spoken note', () => {
+  const r = exporter.build(sampleEvents, sampleMeta);
+  assert.ok(r.markdown.includes('unrelated note far away'));
+  assert.ok(/spoken:/.test(r.markdown), 'rendered as a spoken note');
+});
+
+test('json has correct shape and counts', () => {
+  const r = exporter.build(sampleEvents, sampleMeta);
+  const j = JSON.parse(r.json);
+  assert.strictEqual(j.durationMs, 60000);
+  assert.strictEqual(j.screenshots.length, 2);
+  assert.strictEqual(j.transcript.length, 2);
+  assert.deepStrictEqual(j.screenshots[1].spoken, ['the save button is broken']);
+});
+
+test('relTime formats mm:ss and h:mm:ss', () => {
+  assert.strictEqual(exporter.relTime(0), '00:00');
+  assert.strictEqual(exporter.relTime(65000), '01:05');
+  assert.strictEqual(exporter.relTime(3661000), '1:01:01');
+});
+
+test('empty session still builds', () => {
+  const r = exporter.build([], {});
+  assert.ok(typeof r.markdown === 'string' && r.markdown.length > 0);
+  assert.strictEqual(r.screenshots.length, 0);
+});
+
+console.log('zip:');
+
+test('crc32 of "123456789" is 0xCBF43926', () => {
+  const bytes = Buffer.from('123456789', 'ascii');
+  assert.strictEqual(zip.crc32(bytes), 0xcbf43926);
+});
+
+test('buildZipBytes produces a valid-looking archive', () => {
+  const enc = (s) => new Uint8Array(Buffer.from(s, 'utf8'));
+  const bytes = zip.buildZipBytes([
+    { name: 'feedback.md', data: enc('# hello') },
+    { name: 'screenshots/0001.png', data: new Uint8Array([1, 2, 3, 4]) },
+  ]);
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  // first local file header signature PK\x03\x04
+  assert.strictEqual(dv.getUint32(0, true), 0x04034b50);
+  // EOCD is the last 22 bytes
+  const eocd = bytes.length - 22;
+  assert.strictEqual(dv.getUint32(eocd, true), 0x06054b50, 'EOCD signature');
+  assert.strictEqual(dv.getUint16(eocd + 10, true), 2, 'total entries');
+  // central dir offset points at a central-directory header PK\x01\x02
+  const cdOff = dv.getUint32(eocd + 16, true);
+  assert.strictEqual(dv.getUint32(cdOff, true), 0x02014b50, 'central dir signature');
+});
+
+test('buildZipBytes round-trips entry names + data', () => {
+  const enc = (s) => new Uint8Array(Buffer.from(s, 'utf8'));
+  const name = 'session.json';
+  const data = enc('{"a":1}');
+  const bytes = zip.buildZipBytes([{ name, data }]);
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const nameLen = dv.getUint16(26, true);
+  const storedName = Buffer.from(bytes.slice(30, 30 + nameLen)).toString('utf8');
+  assert.strictEqual(storedName, name);
+  const storedData = Buffer.from(bytes.slice(30 + nameLen, 30 + nameLen + data.length)).toString('utf8');
+  assert.strictEqual(storedData, '{"a":1}');
+});
+
+console.log('\n' + passed + ' passed, ' + failed + ' failed');
+process.exit(failed ? 1 : 0);

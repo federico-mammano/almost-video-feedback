@@ -1,0 +1,98 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Almost Video Feedback for AI — Settings</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <div class="page">
+      <h1>Almost Video Feedback for AI — Settings</h1>
+      <p class="muted">Changes save automatically and apply to the next recording.</p>
+
+      <section>
+        <h2>Transcription</h2>
+        <div class="field">
+          <label for="language">Language</label>
+          <input id="language" type="text" />
+          <span class="help">BCP-47 code, e.g. <code>en-US</code>, <code>es-ES</code>.</span>
+        </div>
+      </section>
+
+      <section>
+        <h2>Screenshot triggers</h2>
+        <p class="muted">Choose which moments capture a screenshot.</p>
+        <div class="toggles">
+          <label><input type="checkbox" id="t_start" /> On start</label>
+          <label><input type="checkbox" id="t_navigation" /> New page load</label>
+          <label><input type="checkbox" id="t_route" /> In-app navigation</label>
+          <label><input type="checkbox" id="t_click" /> Click</label>
+          <label><input type="checkbox" id="t_selection" /> Text selection</label>
+          <label><input type="checkbox" id="t_circle" /> Mouse circling</label>
+          <label><input type="checkbox" id="t_dwell" /> Pause after moving</label>
+          <label><input type="checkbox" id="t_scroll" /> Scroll &amp; stop</label>
+          <label><input type="checkbox" id="t_heartbeat" /> Periodic</label>
+        </div>
+      </section>
+
+      <section>
+        <h2>Capture quality &amp; dedup</h2>
+        <div class="field">
+          <label for="captureFormat">Image format</label>
+          <select id="captureFormat">
+            <option value="png">PNG (crisp text, larger)</option>
+            <option value="jpeg">JPEG (smaller)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="jpegQuality">JPEG quality (0–100)</label>
+          <input id="jpegQuality" type="number" min="1" max="100" />
+        </div>
+        <div class="field">
+          <label for="dedupHammingThreshold">Dedup threshold (0–20)</label>
+          <input id="dedupHammingThreshold" type="number" min="0" max="20" />
+          <span class="help">Higher = cull more near-identical frames. Priority triggers (start, navigation, selection, circling, manual) are never culled.</span>
+        </div>
+        <div class="field">
+          <label for="maxScreenshots">Max screenshots / session</label>
+          <input id="maxScreenshots" type="number" min="10" max="2000" />
+        </div>
+        <div class="field">
+          <label for="minCaptureIntervalMs">Min interval between captures (ms)</label>
+          <input id="minCaptureIntervalMs" type="number" min="300" max="5000" />
+        </div>
+      </section>
+
+      <section>
+        <h2>Trigger tuning</h2>
+        <div class="grid">
+          <div class="field"><label for="heartbeatSeconds">Periodic interval (s)</label><input id="heartbeatSeconds" type="number" min="5" max="600" /></div>
+          <div class="field"><label for="scrollIdleMs">Scroll-stop idle (ms)</label><input id="scrollIdleMs" type="number" min="100" max="3000" /></div>
+          <div class="field"><label for="scrollMinDeltaPx">Scroll min delta (px)</label><input id="scrollMinDeltaPx" type="number" min="20" max="3000" /></div>
+          <div class="field"><label for="dwellMs">Dwell delay (ms)</label><input id="dwellMs" type="number" min="100" max="3000" /></div>
+          <div class="field"><label for="dwellMinMovePx">Dwell min move (px)</label><input id="dwellMinMovePx" type="number" min="20" max="2000" /></div>
+          <div class="field"><label for="circleMinPathPx">Circle min path (px)</label><input id="circleMinPathPx" type="number" min="60" max="3000" /></div>
+          <div class="field"><label for="circleRatio">Circle ratio</label><input id="circleRatio" type="number" min="1.2" max="10" step="0.1" /></div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Overlay</h2>
+        <label class="inline"><input type="checkbox" id="showOverlay" /> Show the on-page recording overlay (transcript bar + buttons)</label>
+      </section>
+
+      <section>
+        <h2>Hotkeys</h2>
+        <p class="muted">Configure start/stop and force-screenshot keys in Chrome.</p>
+        <button id="shortcuts" class="btn">Open Chrome shortcuts</button>
+      </section>
+
+      <div class="footer">
+        <button id="reset" class="btn danger">Reset to defaults</button>
+        <span id="saved" class="saved"></span>
+      </div>
+    </div>
+    <script src="../common/config.js"></script>
+    <script src="options.js"></script>
+  </body>
+</html>

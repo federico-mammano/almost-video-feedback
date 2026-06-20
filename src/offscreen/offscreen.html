@@ -1,0 +1,13 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>SCF offscreen</title>
+  </head>
+  <body>
+    <!-- Hidden host for clipboard writes via execCommand('copy'). -->
+    <textarea id="clip" aria-hidden="true" style="position:fixed;left:-9999px;top:-9999px;"></textarea>
+    <script src="../common/protocol.js"></script>
+    <script src="offscreen.js"></script>
+  </body>
+</html>

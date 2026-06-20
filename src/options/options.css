@@ -1,0 +1,45 @@
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: #0f172a; color: #e2e8f0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 14px; line-height: 1.5;
+}
+.page { max-width: 720px; margin: 0 auto; padding: 28px 24px 60px; }
+h1 { font-size: 22px; margin: 0 0 4px; }
+h2 { font-size: 15px; margin: 0 0 10px; color: #c7d2fe; }
+.muted { color: #94a3b8; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: #cbd5e1; background: #1e293b; padding: 1px 5px; border-radius: 4px; }
+
+section {
+  background: #111827; border: 1px solid #1f2937; border-radius: 12px;
+  padding: 16px 18px; margin: 16px 0;
+}
+.field { display: flex; flex-direction: column; gap: 5px; margin: 12px 0; }
+.field label { font-weight: 600; }
+.field .help { color: #94a3b8; font-size: 12px; }
+input[type="text"], input[type="number"], select {
+  background: #0b1220; border: 1px solid #334155; color: #e2e8f0;
+  border-radius: 8px; padding: 8px 10px; font-size: 14px; max-width: 320px;
+}
+input:focus, select:focus { outline: none; border-color: #6366f1; }
+
+.toggles, .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 18px; }
+.toggles label, .inline {
+  display: flex; align-items: center; gap: 8px; font-weight: 500;
+}
+.grid .field { margin: 4px 0; }
+input[type="checkbox"] { width: 16px; height: 16px; accent-color: #6366f1; }
+
+.btn {
+  background: #1e293b; border: 1px solid #334155; color: #e2e8f0;
+  border-radius: 8px; padding: 9px 14px; font-weight: 600; cursor: pointer; font-size: 13.5px;
+}
+.btn:hover { background: #243044; }
+.btn.danger { border-color: rgba(244,63,94,.5); color: #fca5a5; }
+.btn.danger:hover { background: rgba(244,63,94,.15); }
+
+.footer { display: flex; align-items: center; gap: 14px; margin-top: 18px; }
+.saved { color: #86efac; font-weight: 600; opacity: 0; transition: opacity .2s ease; }
+.saved.show { opacity: 1; }
+
+@media (max-width: 540px) { .toggles, .grid { grid-template-columns: 1fr; } }
