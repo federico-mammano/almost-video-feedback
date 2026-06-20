@@ -1,4 +1,4 @@
-# Almost Video Feedback for AI
+# Almost Video Feedback
 
 A Chrome extension (Manifest V3) for recording **spoken + visual feedback** on a web app and
 handing an AI coding agent (Claude Code, etc.) a single file that says exactly what to fix —
@@ -66,8 +66,8 @@ Paste that straight into Claude Code.
 
 ## Install (load unpacked)
 
-**Easiest:** download `almost-video-feedback-for-ai.zip` from the
-[latest release](https://github.com/JustinWi/almost-video-feedback-for-ai/releases/latest), unzip it,
+**Easiest:** download `almost-video-feedback.zip` from the
+[latest release](https://github.com/JustinWi/almost-video-feedback/releases/latest), unzip it,
 and load that folder (steps below). Or clone this repo and load the folder directly.
 
 1. Open `chrome://extensions`.
@@ -178,6 +178,9 @@ PRs and ideas welcome — it's open source (MIT). There's no build step, so gett
 "load unpacked + edit + reload". See **[CONTRIBUTING.md](CONTRIBUTING.md)** for the dev loop, the
 architecture, and good first contributions (new screenshot triggers, a remote transcription engine,
 output tweaks). Run `npm test && npm run verify` before opening a PR.
+
+**Making changes with an AI agent?** Read **[AGENTS.md](AGENTS.md)** (and `CLAUDE.md`) — it has the
+conventions and the verification checklist that keep the extension loadable and in good standing.
 
 ## Roadmap
 

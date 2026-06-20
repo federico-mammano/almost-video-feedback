@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Almost Video Feedback for AI",
+  "name": "Almost Video Feedback",
   "version": "0.1.0",
   "description": "Record spoken + visual feedback on a web app and hand an AI coding agent a single file of screenshots correlated to what you said and did.",
   "minimum_chrome_version": "116",
@@ -21,7 +21,7 @@
     "service_worker": "src/background/service-worker.js"
   },
   "action": {
-    "default_title": "Almost Video Feedback for AI",
+    "default_title": "Almost Video Feedback",
     "default_popup": "src/popup/popup.html",
     "default_icon": {
       "16": "icons/icon16.png",

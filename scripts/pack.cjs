@@ -1,7 +1,7 @@
 /*
  * Build a clean, shareable .zip of the extension (only what Chrome needs to
  * "Load unpacked" — no tests/scripts/docs). Reuses the bundled ZIP writer.
- * Run: node scripts/pack.cjs  ->  dist/almost-video-feedback-for-ai.zip
+ * Run: node scripts/pack.cjs  ->  dist/almost-video-feedback.zip
  */
 'use strict';
 const fs = require('fs');
@@ -9,7 +9,7 @@ const path = require('path');
 const zip = require('../src/common/zip.js');
 
 const root = path.join(__dirname, '..');
-const TOP = 'almost-video-feedback-for-ai';
+const TOP = 'almost-video-feedback';
 const FILES = ['manifest.json', 'README.md', 'INSTALL.md', 'LICENSE'];
 const DIRS = ['icons', 'src'];
 

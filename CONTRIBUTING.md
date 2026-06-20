@@ -1,7 +1,10 @@
 # Contributing
 
-Thanks for helping improve **Almost Video Feedback for AI**! Contributions of all sizes are welcome —
+Thanks for helping improve **Almost Video Feedback**! Contributions of all sizes are welcome —
 bug fixes, new screenshot triggers, transcription engines, UI polish, docs.
+
+> **Using an AI coding agent** (Claude Code, Cursor, Copilot, …)? Point it at **[AGENTS.md](AGENTS.md)**
+> first — it has the rules and the verification checklist that keep changes in good standing.
 
 ## Quick start (dev)
 

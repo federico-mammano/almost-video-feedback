@@ -50,7 +50,7 @@ function setBadge(mode) {
     chrome.action.setTitle({ title: 'Saving feedback…' });
   } else {
     chrome.action.setBadgeText({ text: '' });
-    chrome.action.setTitle({ title: 'Almost Video Feedback for AI' });
+    chrome.action.setTitle({ title: 'Almost Video Feedback' });
   }
 }
 

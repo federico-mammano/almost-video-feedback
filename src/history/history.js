@@ -209,7 +209,7 @@
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({
           files: [file],
-          title: 'Almost Video Feedback for AI',
+          title: 'Almost Video Feedback',
           text: 'UI feedback bundle for an AI coding agent.',
         });
         return;
