@@ -109,34 +109,29 @@
     }
   }
 
-  async function writeSession(bundle, store, startedAtMs) {
-    const dir = 'ai-feedback/' + folderName(startedAtMs);
-    setDownloadUi(false);
-    try {
-      // screenshots first
-      for (const s of bundle.screenshots) {
-        const shot = await store.getScreenshot(s.seq);
-        if (!shot || !shot.blob) continue;
-        const url = await blobToDataUrl(shot.blob, shot.mime);
-        await download(url, dir + '/' + s.file);
-      }
+  function sessionDir(startedAtMs) {
+    return 'ai-feedback/' + folderName(startedAtMs);
+  }
 
-      // structured json
-      await download(textDataUrl(bundle.json, 'application/json'), dir + '/session.json');
+  // Write one screenshot to Downloads. Called incrementally DURING recording so
+  // the cost is spread out instead of bursting at stop (big save-time win).
+  async function saveShot(dir, file, blob, mime) {
+    const url = await blobToDataUrl(blob, mime);
+    return download(url, dir + '/' + file);
+  }
 
-      // markdown last, then resolve its absolute path
-      const mdId = await download(textDataUrl(bundle.markdown, 'text/markdown'), dir + '/feedback.md');
-      const mdPath = await resolvePath(mdId);
-
-      return {
-        dir,
-        mdPath: mdPath || null,
-        folderPath: mdPath ? dirname(mdPath) : null,
-      };
-    } finally {
-      // re-enable after a short grace period so in-flight writes don't flash the UI
-      setTimeout(() => setDownloadUi(true), 1500);
-    }
+  // At stop we now only write the two small text files (screenshots were already
+  // written during the recording), so this is fast.
+  async function writeSession(bundle, startedAtMs) {
+    const dir = sessionDir(startedAtMs);
+    await download(textDataUrl(bundle.json, 'application/json'), dir + '/session.json');
+    const mdId = await download(textDataUrl(bundle.markdown, 'text/markdown'), dir + '/feedback.md');
+    const mdPath = await resolvePath(mdId);
+    return {
+      dir,
+      mdPath: mdPath || null,
+      folderPath: mdPath ? dirname(mdPath) : null,
+    };
   }
 
   function clipboardText(mdPath, folderPath) {
@@ -149,5 +144,13 @@
     ].join('\n');
   }
 
-  root.SCF.downloads = { writeSession, clipboardText, folderName, dirname };
+  root.SCF.downloads = {
+    writeSession,
+    saveShot,
+    sessionDir,
+    setDownloadUi,
+    clipboardText,
+    folderName,
+    dirname,
+  };
 })(typeof globalThis !== 'undefined' ? globalThis : self);

@@ -177,15 +177,72 @@
       );
     }
 
-    const fullText = (json.transcript || []).map((t) => t.text).join(' ').trim();
-    const tTitle = document.createElement('div');
-    tTitle.className = 'section-title';
-    tTitle.textContent = 'Full transcript';
-    bodyEl.appendChild(tTitle);
-    const tBox = document.createElement('div');
-    tBox.className = 'transcript';
-    tBox.textContent = fullText || '(no speech was transcribed)';
-    bodyEl.appendChild(tBox);
+    // ---- editable transcript (fix mis-hearings) ----
+    const transcripts = (rec.events || [])
+      .filter((e) => e.type === 'transcript' && e.final && e.text != null)
+      .sort((a, b) => a.t - b.t);
+
+    const tHead = document.createElement('div');
+    tHead.className = 'tx-head';
+    tHead.innerHTML =
+      '<span class="section-title" style="margin:0">Transcript</span>' +
+      '<span class="tx-hint">edit any line to fix what was misheard, then Save</span>';
+    bodyEl.appendChild(tHead);
+
+    if (!transcripts.length) {
+      const none = document.createElement('div');
+      none.className = 'transcript';
+      none.textContent = '(no speech was transcribed)';
+      bodyEl.appendChild(none);
+    } else {
+      const saveBtn = document.createElement('button');
+      saveBtn.className = 'btn primary tx-save';
+      saveBtn.textContent = 'Save transcript';
+      saveBtn.disabled = true;
+
+      const editor = document.createElement('div');
+      editor.className = 'tx-editor';
+      transcripts.forEach((tr, idx) => {
+        const row = document.createElement('div');
+        row.className = 'tx-row';
+        const time = document.createElement('span');
+        time.className = 'tx-time';
+        time.textContent = exporter.relTime(tr.t - rec.startedAt);
+        const ta = document.createElement('textarea');
+        ta.className = 'tx-input';
+        ta.rows = 1;
+        ta.value = tr.text;
+        ta.dataset.key = tr.id != null ? 'id:' + tr.id : 'ix:' + idx;
+        ta.addEventListener('input', () => {
+          autoGrow(ta);
+          saveBtn.disabled = false;
+        });
+        row.append(time, ta);
+        editor.appendChild(row);
+      });
+      bodyEl.appendChild(editor);
+      editor.querySelectorAll('.tx-input').forEach(autoGrow);
+
+      saveBtn.addEventListener('click', async () => {
+        const byKey = {};
+        transcripts.forEach((tr, idx) => {
+          byKey[tr.id != null ? 'id:' + tr.id : 'ix:' + idx] = tr;
+        });
+        editor.querySelectorAll('.tx-input').forEach((inp) => {
+          const ev = byKey[inp.dataset.key];
+          if (ev) ev.text = inp.value.trim();
+        });
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Saving…';
+        await store.saveHistory(rec); // transcripts are refs into rec.events, so this persists the edits
+        const card = bodyEl.closest('.card');
+        if (card) card._rec = rec;
+        revokeBody(bodyEl);
+        await buildBody(rec, bodyEl);
+        toast('Transcript saved');
+      });
+      bodyEl.appendChild(saveBtn);
+    }
 
     if (rec.mdPath) {
       const p = document.createElement('code');
@@ -193,6 +250,11 @@
       p.textContent = rec.mdPath;
       bodyEl.appendChild(p);
     }
+  }
+
+  function autoGrow(ta) {
+    ta.style.height = 'auto';
+    ta.style.height = Math.min(ta.scrollHeight, 240) + 'px';
   }
 
   function revokeBody(bodyEl) {

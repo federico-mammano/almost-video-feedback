@@ -204,9 +204,13 @@ async function startRecording(requestedTabId) {
     lastTitle: tab.title,
   });
 
-  capture.begin({ windowId: tab.windowId, tabId: tab.id, settings, lastUrl: tab.url, lastTitle: tab.title });
+  capture.begin({ windowId: tab.windowId, tabId: tab.id, settings, lastUrl: tab.url, lastTitle: tab.title, startedAt });
   capture.hooks.onKept = () => broadcastStatus();
   transcriptOpen = true;
+
+  // Screenshots are written to Downloads during the recording (so stop is fast);
+  // hide the download shelf for the whole session so it doesn't pop up repeatedly.
+  self.SCF.downloads.setDownloadUi(false);
 
   setBadge('recording');
 
@@ -259,10 +263,12 @@ async function stopRecording(opts) {
   const bundle = self.SCF.exporter.build(events, meta);
   let written = { mdPath: null, folderPath: null };
   try {
-    written = await self.SCF.downloads.writeSession(bundle, store, meta.startedAt);
+    written = await self.SCF.downloads.writeSession(bundle, meta.startedAt);
   } catch (e) {
     console.warn('[scf] export failed:', e && e.message);
   }
+  // restore the download shelf shortly after (let the md/json writes settle)
+  setTimeout(() => self.SCF.downloads.setDownloadUi(true), 1500);
 
   const clip = self.SCF.downloads.clipboardText(written.mdPath, written.folderPath);
   await ensureOffscreen(); // offscreen is only needed here, for the clipboard write
@@ -520,18 +526,23 @@ async function recover() {
         settings,
       };
       capture.restore(
-        { windowId: meta.windowId, tabId: meta.tabId, settings, lastUrl: meta.lastUrl, lastTitle: meta.lastTitle },
+        { windowId: meta.windowId, tabId: meta.tabId, settings, lastUrl: meta.lastUrl, lastTitle: meta.lastTitle, startedAt: meta.startedAt },
         meta.lastSeq || 0,
         meta.lastKeptHash || null
       );
       capture.hooks.onKept = () => broadcastStatus();
       transcriptOpen = true;
+      self.SCF.downloads.setDownloadUi(false);
       setBadge('recording');
       if (settings.triggers.heartbeat) {
         chrome.alarms.create('heartbeat', { periodInMinutes: Math.max(0.5, settings.heartbeatSeconds / 60) });
       }
       // the content script is still running in the tab and kept its recognition
       // going across the SW restart; nothing else to restart here.
+    } else {
+      // no active session — make sure the download shelf isn't left suppressed
+      // from a prior recording that was abandoned without a clean stop
+      self.SCF.downloads.setDownloadUi(true);
     }
   } catch (e) {
     console.warn('[scf] recover failed:', e && e.message);

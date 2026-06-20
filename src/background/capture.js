@@ -40,6 +40,8 @@
     state.lastKeptHash = null;
     state.seq = 0;
     state.ctx = ctx;
+    state.dir =
+      root.SCF.downloads && ctx && ctx.startedAt ? root.SCF.downloads.sessionDir(ctx.startedAt) : null;
   }
 
   // Restore capture state after a service-worker restart mid-session.
@@ -224,6 +226,11 @@
     };
     await store.addEvent(evt);
     store.patchMeta({ lastKeptHash: state.lastKeptHash, lastSeq: seq }).catch(() => {});
+
+    // write the PNG to Downloads now, during the recording, so stop stays fast
+    if (state.dir && root.SCF.downloads && root.SCF.exporter) {
+      root.SCF.downloads.saveShot(state.dir, root.SCF.exporter.fileFor(seq), blob, mime).catch(() => {});
+    }
 
     // 7) UI feedback + hook
     sendToContent(tabId, { type: MSG.SCREENSHOT_TOAST, seq, trigger: req.trigger }, 100);

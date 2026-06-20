@@ -247,6 +247,14 @@
     for (const r of drop) await deleteHistory(r.id);
   }
 
+  // Persist edits to an archived session record (e.g. corrected transcript text).
+  async function saveHistory(rec) {
+    await tx('history', 'readwrite', (t) => {
+      t.objectStore('history').put(rec);
+    });
+    return rec;
+  }
+
   async function clearHistory() {
     await tx(['history', 'historyShots'], 'readwrite', (t) => {
       t.objectStore('history').clear();
@@ -271,6 +279,7 @@
     deleteHistory,
     deleteHistoryShots,
     pruneHistory,
+    saveHistory,
     clearHistory,
   };
 })(typeof globalThis !== 'undefined' ? globalThis : self);
