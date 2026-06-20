@@ -321,6 +321,10 @@ async function stopRecording(opts) {
   session = null;
   stopping = false;
 
+  // in-page toast so the user knows it's ready even if the popup didn't open /
+  // the extension isn't pinned
+  notifyContent(s.tabId, { type: MSG.SAVED_NOTICE });
+
   broadcastStatus();
   broadcast({ type: 'export_done', result: lastResult });
   return lastResult;
@@ -384,7 +388,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     case MSG.START_RECORDING:
       (async () => {
         if (recoverPromise) await recoverPromise;
-        sendResponse(await startRecording(msg.tabId));
+        // only first-party extension pages (no sender.tab) may target a tab id;
+        // a content script can't ask the SW to record an arbitrary tab
+        const reqTab = sender && sender.tab ? undefined : msg.tabId;
+        sendResponse(await startRecording(reqTab));
       })();
       return true;
 

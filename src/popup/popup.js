@@ -165,19 +165,20 @@
     const lr = state.lastResult;
     if (lr && lr.mdPath) {
       $('result').hidden = false;
-      $('result-path').textContent = lr.mdPath;
+      const ss = lr.screenshots || 0;
+      const sp = lr.transcriptSegments || 0;
       $('result-meta').textContent =
-        (lr.screenshots || 0) + ' screenshots · ' +
-        (lr.transcriptSegments || 0) + ' spoken segments';
+        ss + ' screenshot' + (ss === 1 ? '' : 's') + ' · ' + sp + ' spoken segment' + (sp === 1 ? '' : 's');
     } else {
       $('result').hidden = true;
     }
   }
 
-  // ---- recent recordings (last 5) ----
+  // ---- recent recordings (last 3, with thumbnails) ----
+  let recentUrls = [];
   function esc(s) {
-    return String(s == null ? '' : s).replace(/[&<>"]/g, (c) =>
-      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])
+    return String(s == null ? '' : s).replace(/[&<>"'`]/g, (c) =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '`': '&#96;' }[c])
     );
   }
   function fmtDur(ms) {
@@ -224,44 +225,56 @@
       /* ignore */
     }
   }
-  function renderRecentItem(rec) {
-    const item = document.createElement('div');
-    item.className = 'recent-item';
-    const icon = document.createElement('span');
-    icon.className = 'ri-icon';
-    icon.textContent = '🎬';
-    const main = document.createElement('div');
-    main.className = 'ri-main';
-    main.title = 'View this recording';
-    main.innerHTML =
-      '<div class="ri-when">' + esc(shortWhen(rec)) + '</div>' +
-      '<div class="ri-sub">' + esc(recSub(rec)) + '</div>';
-    main.addEventListener('click', () => openRecordings(rec.id));
-    const view = document.createElement('button');
-    view.className = 'ri-btn';
-    view.textContent = '🔍';
-    view.title = 'View';
-    view.addEventListener('click', () => openRecordings(rec.id));
-    const copy = document.createElement('button');
-    copy.className = 'ri-btn';
-    copy.textContent = '📋';
-    copy.title = 'Copy prompt';
-    copy.addEventListener('click', () => copyRecent(rec, copy));
-    item.append(icon, main, view, copy);
-    return item;
+  async function firstShotUrl(rec) {
+    try {
+      if (!store) return null;
+      const shots = await store.getHistoryShots(rec.id);
+      if (shots && shots[0] && shots[0].blob) return URL.createObjectURL(shots[0].blob);
+    } catch (e) {
+      /* ignore */
+    }
+    return null;
+  }
+  function renderRecentCard(rec, url) {
+    const card = document.createElement('div');
+    card.className = 'recent-card';
+    card.title = 'Click to view this recording';
+    // url is a blob: object URL we created; text is escaped
+    card.innerHTML =
+      (url
+        ? '<img class="rc-thumb" src="' + url + '" alt="" />'
+        : '<div class="rc-thumb rc-ph"><span class="rc-recdot"></span></div>') +
+      '<div class="rc-meta"><div class="rc-when">' + esc(shortWhen(rec)) + '</div>' +
+      '<div class="rc-sub">' + esc(recSub(rec)) + '</div></div>' +
+      '<div class="rc-actions"><button class="rc-btn rc-copy" title="Copy prompt for this recording">📋</button></div>';
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('.rc-actions')) return;
+      openRecordings(rec.id);
+    });
+    card.querySelector('.rc-copy').addEventListener('click', (e) => {
+      e.stopPropagation();
+      copyRecent(rec, e.currentTarget);
+    });
+    return card;
   }
   async function loadRecent() {
+    recentUrls.forEach((u) => URL.revokeObjectURL(u));
+    recentUrls = [];
     let rows = [];
     try {
       if (store) rows = await store.listHistory();
     } catch (e) {
       /* ignore */
     }
-    rows = rows.slice(0, 5);
+    rows = rows.slice(0, 3);
     recentCount = rows.length;
     const list = $('recent-list');
     list.innerHTML = '';
-    for (const rec of rows) list.appendChild(renderRecentItem(rec));
+    for (const rec of rows) {
+      const url = await firstShotUrl(rec);
+      if (url) recentUrls.push(url);
+      list.appendChild(renderRecentCard(rec, url));
+    }
     if (!state.recording && !state.saving) $('recent').hidden = recentCount === 0;
   }
 

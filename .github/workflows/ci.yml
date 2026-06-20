@@ -1,0 +1,26 @@
+name: CI
+
+# Runs on every push to main and on every pull request (including from forks).
+# There are no runtime dependencies, so there's nothing to install — we just run
+# the unit tests and the manifest/syntax verifier.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Unit tests
+        run: npm test
+      - name: Verify manifest + syntax
+        run: npm run verify

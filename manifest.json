@@ -17,6 +17,9 @@
     "clipboardWrite"
   ],
   "host_permissions": ["<all_urls>"],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; base-uri 'none'"
+  },
   "background": {
     "service_worker": "src/background/service-worker.js"
   },

@@ -1,0 +1,525 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Almost Video Feedback — record feedback for your AI agent</title>
+<meta name="description" content="Hit record, talk through what's broken while you click and scroll, then stop. Almost Video Feedback transcribes you, auto-captures the right screenshots, and hands your AI agent a tidy bundle — already on your clipboard." />
+<meta property="og:title" content="Almost Video Feedback" />
+<meta property="og:description" content="What if you could record video feedback for your AI? Now you almost can." />
+<meta property="og:type" content="website" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230c0b0e'/%3E%3Ccircle cx='16' cy='16' r='8' fill='%23FF453A'/%3E%3C/svg%3E" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Hanken+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#0c0b0e;
+    --bg-2:#141318;
+    --bg-3:#1b1922;
+    --ink:#edeae3;
+    --muted:#9b968c;
+    --faint:#615d57;
+    --rec:#ff453a;
+    --rec-deep:#e11d48;
+    --mint:#7cf5b0;
+    --line:rgba(255,255,255,.09);
+    --line-2:rgba(255,255,255,.06);
+    --display:'Instrument Serif',Georgia,serif;
+    --body:'Hanken Grotesk',-apple-system,system-ui,sans-serif;
+    --mono:'JetBrains Mono',ui-monospace,monospace;
+    --maxw:1120px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--bg);color:var(--ink);font-family:var(--body);
+    font-size:17px;line-height:1.6;-webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+  }
+  /* atmospheric layers */
+  body::before{ /* dotted grid */
+    content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
+    background-image:radial-gradient(rgba(255,255,255,.04) 1px,transparent 1px);
+    background-size:32px 32px;mask-image:radial-gradient(ellipse 90% 70% at 50% 0%,#000 30%,transparent 75%);
+  }
+  body::after{ /* film grain */
+    content:"";position:fixed;inset:0;z-index:9999;pointer-events:none;opacity:.045;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  a{color:inherit;text-decoration:none}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 28px;position:relative;z-index:1}
+  .mono{font-family:var(--mono)}
+  .rec-dot{display:inline-block;width:.62em;height:.62em;border-radius:50%;background:var(--rec);box-shadow:0 0 0 0 rgba(255,69,58,.6);animation:pulse 1.6s infinite}
+  @keyframes pulse{70%{box-shadow:0 0 0 .7em rgba(255,69,58,0)}100%{box-shadow:0 0 0 0 rgba(255,69,58,0)}}
+
+  /* ---------------- nav ---------------- */
+  nav{position:sticky;top:0;z-index:100;backdrop-filter:blur(14px);
+    background:linear-gradient(to bottom,rgba(12,11,14,.86),rgba(12,11,14,.5));
+    border-bottom:1px solid var(--line-2)}
+  nav .wrap{display:flex;align-items:center;justify-content:space-between;height:62px}
+  .brand{display:flex;align-items:center;gap:10px;font-family:var(--mono);font-weight:700;font-size:14.5px;letter-spacing:-.02em}
+  .brand b{font-weight:700}
+  .nav-links{display:flex;align-items:center;gap:28px;font-size:14px;font-weight:600}
+  .nav-links a{color:var(--muted);transition:color .15s}
+  .nav-links a:hover{color:var(--ink)}
+  .nav-cta{padding:8px 15px;border:1px solid var(--line);border-radius:9px;color:var(--ink)!important}
+  .nav-cta:hover{background:var(--bg-2);border-color:rgba(255,255,255,.2)}
+  @media(max-width:720px){.nav-links a:not(.nav-cta){display:none}}
+
+  /* ---------------- hero ---------------- */
+  .hero{padding:74px 0 40px;position:relative}
+  .glow{position:absolute;top:-120px;left:50%;transform:translateX(-50%);width:760px;height:520px;
+    background:radial-gradient(circle at 50% 40%,rgba(255,69,58,.18),transparent 60%);filter:blur(20px);z-index:0;pointer-events:none}
+  .eyebrow{display:inline-flex;align-items:center;gap:9px;font-family:var(--mono);font-size:12.5px;
+    letter-spacing:.06em;text-transform:uppercase;color:var(--muted);border:1px solid var(--line);
+    padding:6px 13px;border-radius:99px;background:rgba(255,255,255,.02)}
+  h1{font-family:var(--display);font-weight:400;letter-spacing:-.01em;line-height:1.02;
+    font-size:clamp(2.7rem,7vw,5.4rem);margin:26px 0 0;max-width:14ch}
+  .punch{font-family:var(--display);font-size:clamp(2.7rem,7vw,5.4rem);line-height:1.02;margin-top:.1em;color:var(--muted)}
+  .punch em{font-style:italic;color:var(--rec);font-weight:400}
+  .lede{font-size:clamp(1.05rem,1.6vw,1.22rem);color:var(--muted);max-width:46ch;margin:30px 0 0;line-height:1.62}
+  .lede b{color:var(--ink);font-weight:600}
+  .cta-row{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px;align-items:center}
+  .btn{display:inline-flex;align-items:center;gap:10px;font-weight:700;font-size:15.5px;
+    padding:14px 22px;border-radius:12px;transition:transform .08s,filter .15s,background .15s,border-color .15s;cursor:pointer;border:1px solid transparent}
+  .btn:active{transform:translateY(1px)}
+  .btn-primary{background:var(--rec);color:#1a0605;box-shadow:0 8px 30px -8px rgba(255,69,58,.6)}
+  .btn-primary:hover{filter:brightness(1.07)}
+  .btn-ghost{border-color:var(--line);color:var(--ink);background:rgba(255,255,255,.015)}
+  .btn-ghost:hover{border-color:rgba(255,255,255,.24);background:var(--bg-2)}
+  .meta-line{font-family:var(--mono);font-size:12.5px;color:var(--faint);margin-top:22px;letter-spacing:.02em}
+  .meta-line span{color:var(--muted)}
+
+  .hero-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:50px;align-items:center}
+  @media(max-width:900px){.hero-grid{grid-template-columns:1fr;gap:40px}}
+
+  /* faux browser + overlay (product preview, pure CSS) */
+  .stage{position:relative;perspective:1400px}
+  .browser{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--bg-2);
+    box-shadow:0 40px 90px -40px rgba(0,0,0,.9),0 0 0 1px rgba(255,255,255,.02);
+    transform:rotateY(-9deg) rotateX(3deg) rotateZ(.6deg);transform-style:preserve-3d}
+  .b-bar{display:flex;align-items:center;gap:7px;padding:11px 13px;background:#0f0e13;border-bottom:1px solid var(--line-2)}
+  .b-bar i{width:11px;height:11px;border-radius:50%;background:#2a2832;display:block}
+  .b-url{flex:1;margin-left:10px;font-family:var(--mono);font-size:11px;color:var(--faint);
+    background:#08070a;border:1px solid var(--line-2);border-radius:7px;padding:5px 11px;overflow:hidden;white-space:nowrap}
+  .b-body{position:relative;height:330px;background:
+    radial-gradient(700px 320px at 80% -10%,rgba(255,69,58,.07),transparent 60%),
+    linear-gradient(160deg,#16151b,#0e0d12)}
+  .skel{position:absolute;background:rgba(255,255,255,.05);border-radius:7px}
+  .skel.s1{top:34px;left:34px;width:160px;height:22px;background:rgba(255,255,255,.1)}
+  .skel.s2{top:70px;left:34px;width:250px;height:12px}
+  .skel.s3{top:90px;left:34px;width:210px;height:12px}
+  .card-skel{position:absolute;top:140px;left:34px;width:300px;height:140px;border:1px solid var(--line);
+    border-radius:12px;background:rgba(255,255,255,.02)}
+  .card-skel::before{content:"";position:absolute;inset:16px 16px auto 16px;height:14px;width:55%;background:rgba(255,255,255,.12);border-radius:5px}
+  .card-skel::after{content:"";position:absolute;left:16px;top:46px;height:10px;width:70%;
+    background:rgba(255,255,255,.06);border-radius:5px;box-shadow:0 22px 0 rgba(255,255,255,.06),0 44px 0 rgba(255,255,255,.05)}
+  .cursor{position:absolute;top:200px;left:250px;width:20px;height:20px;z-index:5;
+    filter:drop-shadow(0 2px 3px rgba(0,0,0,.5));animation:rove 7s ease-in-out infinite}
+  .ring{position:absolute;top:188px;left:236px;width:48px;height:48px;border:2px solid var(--rec);border-radius:50%;
+    opacity:0;animation:ring 7s ease-in-out infinite}
+  @keyframes rove{0%,100%{transform:translate(0,0)}25%{transform:translate(-120px,-90px)}50%{transform:translate(30px,-30px)}75%{transform:translate(-40px,20px)}}
+  @keyframes ring{46%{opacity:0;transform:scale(.4)}54%{opacity:.9;transform:scale(1)}70%{opacity:0;transform:scale(1.25)}}
+
+  /* the recording overlay bar */
+  .overlay{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);width:min(420px,86%);
+    display:flex;align-items:center;gap:11px;padding:10px 13px;border-radius:14px;z-index:8;
+    background:rgba(17,24,39,.86);border:1px solid rgba(255,255,255,.13);backdrop-filter:blur(8px);
+    box-shadow:0 18px 50px -12px rgba(0,0,0,.8)}
+  .ov-rec{display:flex;align-items:center;gap:7px;flex:0 0 auto;font-family:var(--mono);font-size:11px;font-weight:700;color:#fecdd3;letter-spacing:.04em}
+  .ov-timer{color:#cdd0d6;opacity:.85}
+  .ov-shots{color:#9aa0ab;font-size:10.5px}
+  .ov-sep{width:1px;height:20px;background:rgba(255,255,255,.14)}
+  .ov-text{flex:1;font-size:12.5px;color:#e7e8ec;min-height:1.3em;line-height:1.35;overflow:hidden}
+  .ov-text .cur{display:inline-block;width:7px;height:1.05em;background:var(--rec);vertical-align:-2px;margin-left:1px;animation:blink 1s steps(1) infinite}
+  @keyframes blink{50%{opacity:0}}
+  .ov-btns{display:flex;gap:5px;flex:0 0 auto}
+  .ov-btns b{width:25px;height:25px;border-radius:7px;display:grid;place-items:center;font-size:12px;
+    background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);color:#eee;font-weight:400}
+  .toast-shot{position:absolute;left:50%;bottom:74px;transform:translateX(-50%);z-index:8;
+    font-family:var(--mono);font-size:11px;color:var(--mint);background:rgba(8,20,14,.9);
+    border:1px solid rgba(124,245,176,.35);padding:5px 11px;border-radius:99px;opacity:0;animation:toast 7s ease-in-out infinite}
+  @keyframes toast{48%{opacity:0;transform:translate(-50%,6px)}55%{opacity:1;transform:translate(-50%,0)}72%{opacity:1}80%{opacity:0}}
+
+  /* ---------------- generic section ---------------- */
+  section{position:relative;padding:96px 0}
+  .kicker{font-family:var(--mono);font-size:12.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--rec);font-weight:500}
+  h2{font-family:var(--display);font-weight:400;font-size:clamp(2rem,4.2vw,3.3rem);line-height:1.05;letter-spacing:-.01em;margin:14px 0 0;max-width:18ch}
+  h2 em{font-style:italic;color:var(--muted)}
+  .sec-lede{color:var(--muted);font-size:1.08rem;max-width:52ch;margin-top:18px}
+  .reveal{opacity:0;transform:translateY(24px);transition:opacity .7s cubic-bezier(.2,.7,.2,1),transform .7s cubic-bezier(.2,.7,.2,1)}
+  .reveal.in{opacity:1;transform:none}
+
+  /* before / after */
+  .shift{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:54px}
+  @media(max-width:760px){.shift{grid-template-columns:1fr}}
+  .panel{border:1px solid var(--line);border-radius:16px;padding:30px;background:var(--bg-2)}
+  .panel.old{background:transparent;border-style:dashed;border-color:var(--line-2)}
+  .panel h3{font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:20px;font-weight:500}
+  .panel.old h3{color:var(--faint)} .panel.new h3{color:var(--mint)}
+  .panel ul{list-style:none;display:flex;flex-direction:column;gap:13px}
+  .panel li{display:flex;gap:12px;font-size:15.5px;line-height:1.45}
+  .panel li svg{flex:0 0 auto;margin-top:3px}
+  .panel.old li{color:var(--faint)} .panel.old li .t{text-decoration:line-through;text-decoration-color:rgba(255,69,58,.5)}
+  .panel.new li{color:var(--ink)}
+
+  /* demo */
+  .video-frame{margin-top:48px;border:1px solid var(--line);border-radius:18px;overflow:hidden;
+    background:#000;box-shadow:0 50px 110px -50px rgba(0,0,0,.95)}
+  .video-ph{position:relative;aspect-ratio:16/9;display:grid;place-items:center;
+    background:radial-gradient(circle at 50% 42%,rgba(255,69,58,.12),transparent 55%),linear-gradient(160deg,#151419,#0b0a0d)}
+  .video-ph .play{width:84px;height:84px;border-radius:50%;background:var(--rec);display:grid;place-items:center;
+    box-shadow:0 16px 50px -10px rgba(255,69,58,.7);cursor:pointer;transition:transform .15s}
+  .video-ph .play:hover{transform:scale(1.06)}
+  .video-ph .play::after{content:"";border-left:24px solid #1a0605;border-top:15px solid transparent;border-bottom:15px solid transparent;margin-left:6px}
+  .video-ph .cap{position:absolute;bottom:22px;left:0;right:0;text-align:center;font-family:var(--mono);font-size:12.5px;color:var(--muted)}
+  .video-ph .badge{position:absolute;top:18px;left:18px;font-family:var(--mono);font-size:11px;color:#fecdd3;
+    display:flex;align-items:center;gap:7px;background:rgba(0,0,0,.5);padding:5px 11px;border-radius:99px;border:1px solid rgba(255,69,58,.3)}
+
+  /* steps */
+  .steps{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-top:54px;counter-reset:s}
+  @media(max-width:900px){.steps{grid-template-columns:1fr 1fr}}
+  @media(max-width:540px){.steps{grid-template-columns:1fr}}
+  .step{border:1px solid var(--line);border-radius:16px;padding:26px 22px;background:var(--bg-2);position:relative;overflow:hidden}
+  .step::before{counter-increment:s;content:"0" counter(s);position:absolute;top:14px;right:16px;
+    font-family:var(--display);font-size:3.4rem;color:rgba(255,255,255,.05);line-height:1}
+  .step .ic{width:42px;height:42px;border-radius:11px;display:grid;place-items:center;background:rgba(255,69,58,.12);
+    border:1px solid rgba(255,69,58,.25);margin-bottom:18px}
+  .step h4{font-size:18px;font-weight:700;letter-spacing:-.01em}
+  .step p{color:var(--muted);font-size:14.5px;margin-top:9px;line-height:1.5}
+
+  /* features */
+  .feat{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:54px}
+  @media(max-width:860px){.feat{grid-template-columns:1fr 1fr}}
+  @media(max-width:560px){.feat{grid-template-columns:1fr}}
+  .fcard{border:1px solid var(--line);border-radius:14px;padding:24px;background:var(--bg-2);transition:border-color .2s,transform .2s,background .2s}
+  .fcard:hover{border-color:rgba(255,69,58,.4);transform:translateY(-3px);background:var(--bg-3)}
+  .fcard .ic{font-size:20px;margin-bottom:14px;display:block}
+  .fcard h4{font-size:16.5px;font-weight:700}
+  .fcard p{color:var(--muted);font-size:14px;margin-top:8px;line-height:1.5}
+
+  /* install / update / data — terminal cards */
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:48px;align-items:start}
+  @media(max-width:820px){.cols{grid-template-columns:1fr}}
+  .term{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:#0a090d}
+  .term-bar{display:flex;align-items:center;gap:7px;padding:11px 14px;background:#100f14;border-bottom:1px solid var(--line-2);
+    font-family:var(--mono);font-size:12px;color:var(--muted)}
+  .term-bar i{width:10px;height:10px;border-radius:50%;background:#2a2832}
+  .term-bar .ttl{margin-left:8px}
+  .term-body{padding:22px;font-size:15px}
+  .term-body ol{margin-left:0;list-style:none;counter-reset:n;display:flex;flex-direction:column;gap:15px}
+  .term-body ol li{counter-increment:n;display:flex;gap:13px;line-height:1.5}
+  .term-body ol li::before{content:counter(n);flex:0 0 auto;width:23px;height:23px;border-radius:7px;
+    background:rgba(255,69,58,.13);color:var(--rec);font-family:var(--mono);font-size:12px;font-weight:700;display:grid;place-items:center;margin-top:1px}
+  .term-body code,.kbd{font-family:var(--mono);font-size:.88em;background:rgba(255,255,255,.07);
+    border:1px solid var(--line-2);border-radius:6px;padding:2px 7px;color:#e9c8a0}
+  .copyline{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:18px;
+    background:#08070a;border:1px solid var(--line-2);border-radius:9px;padding:11px 13px;font-family:var(--mono);font-size:13px;color:var(--mint)}
+  .copyline button{font-family:var(--mono);font-size:11px;color:var(--muted);background:rgba(255,255,255,.06);
+    border:1px solid var(--line);border-radius:7px;padding:5px 10px;cursor:pointer;transition:.15s;flex:0 0 auto}
+  .copyline button:hover{color:var(--ink);border-color:rgba(255,255,255,.25)}
+
+  /* data / privacy strip */
+  .data{border:1px solid var(--line);border-radius:18px;padding:38px;margin-top:20px;
+    background:linear-gradient(180deg,rgba(124,245,176,.04),transparent)}
+  .data-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:26px;margin-top:26px}
+  @media(max-width:760px){.data-grid{grid-template-columns:1fr}}
+  .data-grid h4{display:flex;align-items:center;gap:9px;font-size:15.5px;font-weight:700}
+  .data-grid p{color:var(--muted);font-size:14px;margin-top:8px;line-height:1.55}
+  .chk{color:var(--mint)}
+
+  /* CTA band */
+  .band{text-align:center;border-top:1px solid var(--line-2);border-bottom:1px solid var(--line-2);
+    padding:90px 0;background:radial-gradient(700px 300px at 50% 100%,rgba(255,69,58,.08),transparent)}
+  .band h2{margin:0 auto;max-width:20ch}
+  .band .cta-row{justify-content:center;margin-top:30px}
+
+  footer{padding:54px 0 70px;color:var(--muted);font-size:14px}
+  .foot-grid{display:flex;flex-wrap:wrap;justify-content:space-between;gap:26px;align-items:center}
+  .foot-links{display:flex;flex-wrap:wrap;gap:24px}
+  .foot-links a:hover{color:var(--ink)}
+  footer .fine{margin-top:26px;font-family:var(--mono);font-size:12px;color:var(--faint);line-height:1.7}
+
+  ::selection{background:var(--rec);color:#1a0605}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="#top"><span class="rec-dot"></span><b>Almost&nbsp;Video&nbsp;Feedback</b></a>
+    <div class="nav-links">
+      <a href="#how">How it works</a>
+      <a href="#install">Install</a>
+      <a href="#data">Your data</a>
+      <a class="nav-cta" href="https://github.com/JustinWi/almost-video-feedback" target="_blank" rel="noopener">GitHub ↗</a>
+    </div>
+  </div>
+</nav>
+
+<a id="top"></a>
+<header class="hero">
+  <div class="glow"></div>
+  <div class="wrap hero-grid">
+    <div class="hero-copy">
+      <span class="eyebrow"><span class="rec-dot"></span> Chrome extension · Free · Open source</span>
+      <h1>What if you could record video feedback for your AI?</h1>
+      <div class="punch">Now you <em>almost</em> can.</div>
+      <p class="lede">Stop typing paragraphs into the CLI. Stop screenshotting, hunting through Downloads, and pasting. Just hit record, talk through what's broken while you click and scroll — then stop. <b>Your words and the right screenshots land on your clipboard, ready to paste.</b></p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="https://github.com/JustinWi/almost-video-feedback/releases/latest" target="_blank" rel="noopener">▶ Install — it's free</a>
+        <a class="btn btn-ghost" href="https://github.com/JustinWi/almost-video-feedback" target="_blank" rel="noopener">★ Star on GitHub</a>
+      </div>
+      <div class="meta-line mono">Manifest V3 · <span>No build step</span> · <span>No account</span> · MIT</div>
+    </div>
+
+    <div class="stage">
+      <div class="browser">
+        <div class="b-bar"><i></i><i></i><i></i><div class="b-url mono">localhost:3000/dashboard</div></div>
+        <div class="b-body">
+          <div class="skel s1"></div><div class="skel s2"></div><div class="skel s3"></div>
+          <div class="card-skel"></div>
+          <div class="ring"></div>
+          <svg class="cursor" viewBox="0 0 24 24" fill="#fff"><path d="M5 3l15 8-6 1.5L11 19 5 3z"/></svg>
+          <div class="toast-shot mono">📸 screenshot captured</div>
+          <div class="overlay">
+            <div class="ov-rec"><span class="rec-dot"></span>REC <span class="ov-timer" id="t">0:14</span> <span class="ov-shots" id="sh">📸 5</span></div>
+            <div class="ov-sep"></div>
+            <div class="ov-text"><span id="typed"></span><span class="cur"></span></div>
+            <div class="ov-btns"><b>📸</b><b>–</b><b>⏹</b></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ===================== THE SHIFT ===================== -->
+<section id="why">
+  <div class="wrap">
+    <span class="kicker reveal">The tedious part</span>
+    <h2 class="reveal">Describing UI bugs to an AI <em>shouldn't take longer than the fix.</em></h2>
+    <div class="shift">
+      <div class="panel old reveal">
+        <h3>The old way</h3>
+        <ul>
+          <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#615d57" stroke-width="1.6"><path d="M4 4l8 8M12 4l-8 8"/></svg><span class="t">Type a wall of text into the prompt</span></li>
+          <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#615d57" stroke-width="1.6"><path d="M4 4l8 8M12 4l-8 8"/></svg><span class="t">Stop, take a screenshot, find it in Downloads</span></li>
+          <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#615d57" stroke-width="1.6"><path d="M4 4l8 8M12 4l-8 8"/></svg><span class="t">Drag it in, then explain which part you mean</span></li>
+          <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#615d57" stroke-width="1.6"><path d="M4 4l8 8M12 4l-8 8"/></svg><span class="t">Repeat. For. Every. Single. Issue.</span></li>
+        </ul>
+      </div>
+      <div class="panel new reveal">
+        <h3>With Almost Video Feedback</h3>
+        <ul>
+          <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#7cf5b0" stroke-width="1.8"><path d="M3 8.5l3.2 3.2L13 5"/></svg><span>Hit record.</span></li>
+          <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#7cf5b0" stroke-width="1.8"><path d="M3 8.5l3.2 3.2L13 5"/></svg><span>Say "this button's misaligned and the total's wrong" while you point at them.</span></li>
+          <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#7cf5b0" stroke-width="1.8"><path d="M3 8.5l3.2 3.2L13 5"/></svg><span>Hit stop. The bundle is on your clipboard.</span></li>
+          <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#7cf5b0" stroke-width="1.8"><path d="M3 8.5l3.2 3.2L13 5"/></svg><span>Paste into your agent. Hit enter. Done.</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== DEMO ===================== -->
+<section id="demo" style="padding-top:20px">
+  <div class="wrap">
+    <span class="kicker reveal">90 seconds</span>
+    <h2 class="reveal">See it work.</h2>
+    <p class="sec-lede reveal">A quick run-through: record some feedback on a real page, stop, and watch an agent pick up the bundle and start fixing.</p>
+    <div class="video-frame reveal">
+      <!-- ▶ TO EMBED YOUR DEMO: replace this whole .video-ph block with, e.g.:
+           <div style="position:relative;aspect-ratio:16/9">
+             <iframe src="https://www.youtube.com/embed/VIDEO_ID" style="position:absolute;inset:0;width:100%;height:100%;border:0"
+                     allow="accelerometer;autoplay;clipboard-write;encrypted-media;picture-in-picture" allowfullscreen></iframe>
+           </div>
+           (Loom works too: https://www.loom.com/embed/VIDEO_ID) -->
+      <div class="video-ph">
+        <div class="badge mono"><span class="rec-dot"></span> DEMO</div>
+        <div class="play" onclick="document.getElementById('install').scrollIntoView()"></div>
+        <div class="cap mono">Demo video coming soon — drop in a Loom/YouTube embed</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== HOW IT WORKS ===================== -->
+<section id="how">
+  <div class="wrap">
+    <span class="kicker reveal">How it works</span>
+    <h2 class="reveal">Four steps. Most of them are <em>just talking.</em></h2>
+    <div class="steps">
+      <div class="step reveal">
+        <div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="6" fill="#ff453a"/></svg></div>
+        <h4>Record</h4>
+        <p>Click the toolbar icon or hit a hotkey. A tidy bar shows you're live, with a timer and shot count.</p>
+      </div>
+      <div class="step reveal">
+        <div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ff7a72" stroke-width="1.7"><path d="M12 3v9m0 0a3 3 0 003-3V6a3 3 0 00-6 0v3a3 3 0 003 3zM6 11a6 6 0 0012 0M12 18v3"/></svg></div>
+        <h4>Talk &amp; point</h4>
+        <p>Describe what's wrong while you click, select text, scroll, or circle the mouse. It transcribes you and auto-captures the right frames.</p>
+      </div>
+      <div class="step reveal">
+        <div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ff7a72" stroke-width="1.7"><rect x="6" y="6" width="12" height="12" rx="2"/></svg></div>
+        <h4>Stop</h4>
+        <p>Click the icon again. It bundles transcript + screenshots and copies a ready-to-go prompt to your clipboard.</p>
+      </div>
+      <div class="step reveal">
+        <div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ff7a72" stroke-width="1.7"><path d="M4 12h14m0 0l-5-5m5 5l-5 5"/></svg></div>
+        <h4>Paste &amp; run</h4>
+        <p>Paste into Claude Code or any agent, hit enter, and wait for the fix. It reads your words and the screenshots in order.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== FEATURES ===================== -->
+<section id="features" style="padding-top:20px">
+  <div class="wrap">
+    <span class="kicker reveal">Under the hood</span>
+    <h2 class="reveal">Strategic about what it captures.</h2>
+    <p class="sec-lede reveal">It's aggressive about catching the right moment and ruthless about not flooding your agent with near-identical frames.</p>
+    <div class="feat">
+      <div class="fcard reveal"><span class="ic">🎙️</span><h4>Real-time transcription</h4><p>Your voice becomes text live in the overlay — no API key, runs in your browser.</p></div>
+      <div class="fcard reveal"><span class="ic">📸</span><h4>Smart screenshots</h4><p>Captures on clicks, text selection, scroll-stops, and mouse-circling — then dedupes near-identical frames with a perceptual hash.</p></div>
+      <div class="fcard reveal"><span class="ic">🧩</span><h4>Correlated bundle</h4><p>Every screenshot is tied to what you said at that moment, the page URL, and the element you touched.</p></div>
+      <div class="fcard reveal"><span class="ic">📋</span><h4>One-paste handoff</h4><p>On stop, a prompt + the file path are already on your clipboard. Paste, enter, go.</p></div>
+      <div class="fcard reveal"><span class="ic">🎞️</span><h4>Recordings library</h4><p>Review past sessions, prune screenshots you don't want, and re-open any of them.</p></div>
+      <div class="fcard reveal"><span class="ic">📤</span><h4>Share as a zip</h4><p>Bundle a session into a .zip and send it over email, Slack, or WhatsApp.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== INSTALL / UPDATE ===================== -->
+<section id="install">
+  <div class="wrap">
+    <span class="kicker reveal">Get started</span>
+    <h2 class="reveal">Up and running in about a minute.</h2>
+    <div class="cols">
+      <div class="term reveal">
+        <div class="term-bar"><i></i><i></i><i></i><span class="ttl mono">install.md</span></div>
+        <div class="term-body">
+          <ol>
+            <li>Download <code>almost-video-feedback.zip</code> from the latest release and unzip it somewhere permanent.</li>
+            <li>Open <code>chrome://extensions</code> and turn on <b>Developer mode</b> (top-right).</li>
+            <li>Click <b>Load unpacked</b> and pick the unzipped folder.</li>
+            <li>Pin it, then allow the microphone the first time you record on a site.</li>
+          </ol>
+          <div class="copyline mono"><span>github.com/JustinWi/almost-video-feedback/releases/latest</span>
+            <button data-copy="https://github.com/JustinWi/almost-video-feedback/releases/latest">copy</button></div>
+        </div>
+      </div>
+      <div class="term reveal">
+        <div class="term-bar"><i></i><i></i><i></i><span class="ttl mono">update.md</span></div>
+        <div class="term-body">
+          <ol>
+            <li><b>From a release:</b> download the newest <code>.zip</code>, unzip over the old folder (replace), then…</li>
+            <li><b>From a clone:</b> run <code>git pull</code> in your local copy.</li>
+            <li>Go to <code>chrome://extensions</code> and click the <b>↻ reload</b> icon on the card.</li>
+            <li>If prompted, re-accept permissions. That's it — your recordings library is preserved.</li>
+          </ol>
+          <div class="copyline mono"><span>git pull &amp;&amp; <span style="color:var(--muted)"># then reload at chrome://extensions</span></span>
+            <button data-copy="git pull">copy</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== YOUR DATA ===================== -->
+<section id="data" style="padding-top:20px">
+  <div class="wrap">
+    <span class="kicker reveal">Your data</span>
+    <h2 class="reveal">It stays on your machine.</h2>
+    <div class="data reveal">
+      <p class="sec-lede" style="margin-top:0">No accounts, no servers, no telemetry — because there are no servers. Screenshots and transcripts are written to your own Downloads folder and the extension's local storage, and nothing else.</p>
+      <div class="data-grid">
+        <div>
+          <h4><span class="chk">●</span> Local by default</h4>
+          <p>Recordings live in your Downloads and in the extension's IndexedDB. The bundle never leaves your device unless <em>you</em> share the zip.</p>
+        </div>
+        <div>
+          <h4><span class="chk">●</span> Honest about voice</h4>
+          <p>Transcription uses Chrome's built-in Web Speech API, so audio is processed by the browser's speech service (Google) — the same as voice typing. No other data leaves.</p>
+        </div>
+        <div>
+          <h4><span class="chk">●</span> Auditable</h4>
+          <p>MIT-licensed, no build step, no dependencies. Read every line, run the tests, and CI checks every contribution.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== CTA BAND ===================== -->
+<section class="band">
+  <div class="wrap">
+    <span class="kicker reveal">Almost, but enough</span>
+    <h2 class="reveal">Talk to your AI like it's <em>in the room with you.</em></h2>
+    <div class="cta-row reveal">
+      <a class="btn btn-primary" href="https://github.com/JustinWi/almost-video-feedback/releases/latest" target="_blank" rel="noopener">▶ Install — it's free</a>
+      <a class="btn btn-ghost" href="https://github.com/JustinWi/almost-video-feedback" target="_blank" rel="noopener">Read the source</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="foot-grid">
+      <a class="brand" href="#top"><span class="rec-dot"></span><b>Almost&nbsp;Video&nbsp;Feedback</b></a>
+      <div class="foot-links">
+        <a href="https://github.com/JustinWi/almost-video-feedback" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://github.com/JustinWi/almost-video-feedback/releases/latest" target="_blank" rel="noopener">Releases</a>
+        <a href="https://github.com/JustinWi/almost-video-feedback/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">Contribute</a>
+        <a href="https://github.com/JustinWi/almost-video-feedback/blob/main/AGENTS.md" target="_blank" rel="noopener">For AI agents</a>
+      </div>
+    </div>
+    <div class="fine">
+      Open source under the MIT License. Built for developers who'd rather talk than type.<br/>
+      Not affiliated with Anthropic, Google, or OpenAI. "Claude Code" and other agents are referenced for compatibility only.
+    </div>
+  </div>
+</footer>
+
+<script>
+  // hero: live-typed transcript
+  (function(){
+    var el=document.getElementById('typed');
+    if(!el)return;
+    var line="ok this save button is misaligned… and the total here is showing zero, that's wrong—";
+    var i=0;
+    function tick(){
+      if(i<=line.length){ el.textContent=line.slice(0,i); i++; setTimeout(tick, 38 + (Math.random()*40)); }
+      else { setTimeout(function(){ i=0; }, 2600); setTimeout(tick, 2700); }
+    }
+    setTimeout(tick, 700);
+    // tick the mock timer + shot count
+    var t=document.getElementById('t'), sh=document.getElementById('sh'), s=14, n=5;
+    setInterval(function(){ s++; t.textContent='0:'+(s<10?'0':'')+s; },1000);
+    setInterval(function(){ n++; sh.textContent='📸 '+n; },7000);
+  })();
+
+  // scroll reveals
+  (function(){
+    var obs=new IntersectionObserver(function(es){
+      es.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('in'); obs.unobserve(e.target);} });
+    },{threshold:.12, rootMargin:'0px 0px -8% 0px'});
+    document.querySelectorAll('.reveal').forEach(function(n,idx){
+      n.style.transitionDelay=( (idx%4)*70 )+'ms';
+      obs.observe(n);
+    });
+  })();
+
+  // copy buttons
+  document.querySelectorAll('[data-copy]').forEach(function(b){
+    b.addEventListener('click', function(){
+      navigator.clipboard.writeText(b.getAttribute('data-copy')).then(function(){
+        var o=b.textContent; b.textContent='copied ✓'; setTimeout(function(){b.textContent=o;},1400);
+      });
+    });
+  });
+</script>
+</body>
+</html>

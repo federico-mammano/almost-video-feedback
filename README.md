@@ -84,6 +84,29 @@ prompt — click **Allow**. The grant is remembered per site, so you only do it 
 (your own app / `localhost` included). If you block it by mistake, re-allow it via the microphone
 icon in the address bar and start again.
 
+## Privacy & security
+
+Short version: **your recordings stay on your machine.** There is no backend — no servers, accounts,
+or telemetry. The extension makes **no network requests of its own** (independently audited; the only
+`fetch` is of a local `data:` URL).
+
+- **Where data lives:** screenshots, transcripts, and the bundle are written to your **Downloads**
+  folder and the extension's **local storage** (IndexedDB, which keeps your last 40 sessions until you
+  clear them). Nothing leaves your device unless *you* share a zip.
+- **Microphone / transcription:** transcription uses **Chrome's built-in Web Speech API**. In Chrome
+  that means your spoken audio is sent to the browser's speech service (Google) to be turned into
+  text — the same as voice typing. The extension itself transmits nothing; this is the browser's
+  behavior. (A future release may add an offline/remote engine you can choose.)
+- **Permissions:** it requests broad permissions because it has to work on *any* site you review —
+  `<all_urls>` (inject the overlay + read the page you're reviewing), screenshot the active tab, the
+  microphone, downloads, and local storage. It only acts on the tab you're actively recording.
+- **Reviewing untrusted pages:** `feedback.md` includes text copied from the page (URLs, element
+  labels, your selections). If you record on a page with attacker-controlled content, that text ends
+  up in the file you paste into your AI agent — so treat the output as you would any untrusted input,
+  and glance at it before handing it to an agent.
+- **Auditable:** MIT-licensed, no dependencies, no build step, no minified code. Found something?
+  See [SECURITY.md](SECURITY.md).
+
 ## Using it
 
 1. Open the tab you want to review (any normal `http`/`https` page, including `localhost`).

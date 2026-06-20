@@ -102,8 +102,8 @@
     return Object.assign({ url: location.href, title: document.title }, meta || {});
   }
   function escapeHtml(s) {
-    return String(s).replace(/[&<>"]/g, (c) =>
-      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])
+    return String(s).replace(/[&<>"'`]/g, (c) =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '`': '&#96;' }[c])
     );
   }
 
@@ -445,21 +445,25 @@
     }, 250);
   }
 
+  let wrapPush = null;
+  let wrapReplace = null;
   function patchHistory() {
     if (origPush) return;
     origPush = history.pushState;
     origReplace = history.replaceState;
     try {
-      history.pushState = function () {
+      wrapPush = function () {
         const r = origPush.apply(this, arguments);
         onRoute();
         return r;
       };
-      history.replaceState = function () {
+      wrapReplace = function () {
         const r = origReplace.apply(this, arguments);
         onRoute();
         return r;
       };
+      history.pushState = wrapPush;
+      history.replaceState = wrapReplace;
     } catch (_) {
       /* some pages freeze history */
     }
@@ -469,12 +473,14 @@
 
   function unpatchHistory() {
     try {
-      if (origPush) history.pushState = origPush;
-      if (origReplace) history.replaceState = origReplace;
+      // only restore if our wrapper is still installed; if the page re-patched
+      // on top of us, leave its wrapper alone (don't clobber the page's router)
+      if (origPush && history.pushState === wrapPush) history.pushState = origPush;
+      if (origReplace && history.replaceState === wrapReplace) history.replaceState = origReplace;
     } catch (_) {
       /* ignore */
     }
-    origPush = origReplace = null;
+    origPush = origReplace = wrapPush = wrapReplace = null;
     window.removeEventListener('popstate', onRoute);
     window.removeEventListener('hashchange', onRoute);
   }
@@ -639,6 +645,71 @@
     micErrorMsg = '';
   }
 
+  // -------------------------------------------------- "saved" page toast
+  // Shown at the top of the page when a recording finishes, so the user knows
+  // it's ready even if the extension isn't pinned. Independent of the overlay.
+  const TOAST_CSS = `
+    :host{ all: initial; }
+    .t{ position: fixed; top: 20px; left: 50%; transform: translate(-50%,-22px);
+      display:flex; align-items:center; gap:13px; max-width:92vw;
+      padding:13px 18px 15px; border-radius:15px;
+      background:linear-gradient(180deg, rgba(20,18,24,.96), rgba(14,12,16,.96));
+      border:1px solid rgba(255,255,255,.14);
+      box-shadow:0 20px 60px -16px rgba(0,0,0,.7), 0 0 0 1px rgba(255,69,58,.18), 0 0 40px -10px rgba(255,69,58,.35);
+      backdrop-filter:blur(10px); color:#f4f2ee; opacity:0; pointer-events:auto; cursor:pointer;
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+      z-index:2147483647; transition:opacity .32s ease, transform .42s cubic-bezier(.2,.9,.25,1); overflow:hidden; }
+    .t.in{ opacity:1; transform:translate(-50%,0); }
+    .t.out{ opacity:0; transform:translate(-50%,-22px); }
+    .ic{ flex:0 0 auto; width:34px; height:34px; border-radius:10px; display:grid; place-items:center;
+      background:radial-gradient(circle at 35% 30%, #34d399, #059669); box-shadow:0 4px 14px -4px rgba(16,185,129,.7); }
+    .ic svg{ display:block; animation:pop .45s .08s both cubic-bezier(.2,1.6,.4,1); }
+    @keyframes pop{ from{ transform:scale(.2); opacity:0 } to{ transform:scale(1); opacity:1 } }
+    .tx .h{ font-weight:800; font-size:14.5px; letter-spacing:-.01em; }
+    .tx .s{ font-size:12.5px; color:#b9b4ab; margin-top:2px; }
+    .tx .s kbd{ font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11px; background:rgba(255,255,255,.1);
+      border:1px solid rgba(255,255,255,.16); border-radius:5px; padding:1px 5px; color:#e7e4dd; }
+    .bar{ position:absolute; left:0; bottom:0; height:3px; width:100%;
+      background:linear-gradient(90deg,#ff453a,#fb7185); transform-origin:left; animation:deplete 6s linear forwards; }
+    @keyframes deplete{ from{ transform:scaleX(1) } to{ transform:scaleX(0) } }`;
+
+  function showSavedToast() {
+    try {
+      const prev = document.getElementById('__scf_toast_host');
+      if (prev) prev.remove();
+      const host = document.createElement('div');
+      host.id = '__scf_toast_host';
+      host.style.cssText = 'all:initial;position:fixed;top:0;left:0;width:0;height:0;z-index:2147483647;';
+      const sh = host.attachShadow({ mode: 'open' });
+      const isMac = /Mac|iPhone|iPad/i.test(navigator.platform || '');
+      sh.innerHTML =
+        '<style>' + TOAST_CSS + '</style>' +
+        '<div class="t" id="t">' +
+        '<div class="ic"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#06281c" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg></div>' +
+        '<div class="tx"><div class="h">Instructions copied</div>' +
+        '<div class="s">Paste them into your AI — <kbd>' + (isMac ? '⌘V' : 'Ctrl+V') + '</kbd></div></div>' +
+        '<div class="bar"></div></div>';
+      (document.documentElement || document.body).appendChild(host);
+      const t = sh.getElementById('t');
+      requestAnimationFrame(() => t.classList.add('in'));
+      let done = false;
+      const dismiss = () => {
+        if (done) return;
+        done = true;
+        t.classList.remove('in');
+        t.classList.add('out');
+        setTimeout(() => host.remove(), 460);
+      };
+      const to = setTimeout(dismiss, 6000);
+      t.addEventListener('click', () => {
+        clearTimeout(to);
+        dismiss();
+      });
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (!msg || !msg.type) return;
     switch (msg.type) {
@@ -647,6 +718,9 @@
         break;
       case MSG.SESSION_STOPPED:
         onSessionStopped();
+        break;
+      case MSG.SAVED_NOTICE:
+        showSavedToast();
         break;
       case MSG.SCREENSHOT_TOAST:
         // no flashing toast — just bump the static counter in the bar
