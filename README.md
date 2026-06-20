@@ -66,9 +66,13 @@ Paste that straight into Claude Code.
 
 ## Install (load unpacked)
 
+**Easiest:** download `almost-video-feedback-for-ai.zip` from the
+[latest release](https://github.com/JustinWi/almost-video-feedback-for-ai/releases/latest), unzip it,
+and load that folder (steps below). Or clone this repo and load the folder directly.
+
 1. Open `chrome://extensions`.
 2. Toggle **Developer mode** (top right).
-3. Click **Load unpacked** and select this folder (the one containing `manifest.json`).
+3. Click **Load unpacked** and select the folder (the one containing `manifest.json`).
 4. Pin the extension so you can see the toolbar button + recording badge.
 
 Requires Chrome 116+.
@@ -167,6 +171,13 @@ docs/superpowers/specs/    design spec
 test/        node test runner
 scripts/     icon generator + verifier
 ```
+
+## Contributing
+
+PRs and ideas welcome — it's open source (MIT). There's no build step, so getting started is just
+"load unpacked + edit + reload". See **[CONTRIBUTING.md](CONTRIBUTING.md)** for the dev loop, the
+architecture, and good first contributions (new screenshot triggers, a remote transcription engine,
+output tweaks). Run `npm test && npm run verify` before opening a PR.
 
 ## Roadmap
 
