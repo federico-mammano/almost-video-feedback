@@ -62,33 +62,36 @@
     });
   }
 
+  // Resolve the absolute on-disk path of a download by polling downloads.search.
+  // Chrome assigns the target `filename` (the absolute path) as soon as the
+  // download is created, so we can return it without waiting for completion —
+  // and polling avoids missing the (sometimes instant) onChanged event for
+  // data-URL writes, which previously left the path empty.
   function resolvePath(id) {
     return new Promise((resolve) => {
-      let settled = false;
-      function finish(val) {
-        if (settled) return;
-        settled = true;
-        chrome.downloads.onChanged.removeListener(onChanged);
-        clearTimeout(to);
-        resolve(val);
+      if (id == null) {
+        resolve(null);
+        return;
       }
-      function check() {
+      let tries = 0;
+      (function poll() {
         chrome.downloads.search({ id }, (items) => {
           const it = items && items[0];
-          if (it && it.state === 'complete' && it.filename) finish(it.filename);
-          else if (it && it.state === 'interrupted') finish(null);
+          if (it && it.filename) {
+            resolve(it.filename);
+            return;
+          }
+          if (it && it.state === 'interrupted') {
+            resolve(null);
+            return;
+          }
+          if (++tries > 40) {
+            resolve(null); // ~6s ceiling
+            return;
+          }
+          setTimeout(poll, 150);
         });
-      }
-      function onChanged(delta) {
-        if (delta.id === id && (delta.state || delta.filename)) check();
-      }
-      const to = setTimeout(() => {
-        chrome.downloads.search({ id }, (items) => {
-          finish((items && items[0] && items[0].filename) || null);
-        });
-      }, 5000);
-      chrome.downloads.onChanged.addListener(onChanged);
-      check();
+      })();
     });
   }
 
@@ -134,8 +137,12 @@
     };
   }
 
-  function clipboardText(mdPath, folderPath) {
-    const path = mdPath || '(feedback.md in your Downloads/ai-feedback folder)';
+  function clipboardText(mdPath, dir) {
+    const path = mdPath
+      ? mdPath
+      : dir
+        ? 'in your Downloads folder at ' + dir + '/feedback.md'
+        : '(feedback.md in your Downloads/ai-feedback folder)';
     return [
       'I recorded visual + spoken feedback on my web app. Please read the feedback file and',
       'address each item. Screenshots are referenced relative to the file, in the same folder.',

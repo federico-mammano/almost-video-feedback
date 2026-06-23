@@ -26,11 +26,16 @@
     );
   }
   function clipFor(rec) {
+    const path = rec.mdPath
+      ? rec.mdPath
+      : rec.dir
+        ? 'in your Downloads folder at ' + rec.dir + '/feedback.md'
+        : '(feedback.md in the shared zip / your Downloads/ai-feedback folder)';
     return [
       'I recorded visual + spoken feedback on my web app. Please read the feedback file and',
       'address each item. Screenshots are referenced relative to the file, in the same folder.',
       '',
-      'Feedback file: ' + (rec.mdPath || '(feedback.md in the shared zip / your Downloads/ai-feedback folder)'),
+      'Feedback file: ' + path,
     ].join('\n');
   }
   function elText(el) {

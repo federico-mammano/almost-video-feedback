@@ -270,7 +270,7 @@ async function stopRecording(opts) {
   // restore the download shelf shortly after (let the md/json writes settle)
   setTimeout(() => self.SCF.downloads.setDownloadUi(true), 1500);
 
-  const clip = self.SCF.downloads.clipboardText(written.mdPath, written.folderPath);
+  const clip = self.SCF.downloads.clipboardText(written.mdPath, written.dir);
   await ensureOffscreen(); // offscreen is only needed here, for the clipboard write
   await sendToOffscreen({ type: MSG.COPY_TO_CLIPBOARD, text: clip });
 
@@ -304,6 +304,7 @@ async function stopRecording(opts) {
         transcriptCount,
         mdPath: written.mdPath,
         folderPath: written.folderPath,
+        dir: written.dir,
         events,
       },
       shots

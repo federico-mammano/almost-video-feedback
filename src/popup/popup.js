@@ -204,10 +204,15 @@
     return fmtDur(rec.durationMs || 0) + ' · ' + (rec.screenshotCount || 0) + ' shots' + (host ? ' · ' + host : '');
   }
   function clipFor(rec) {
+    const path = rec.mdPath
+      ? rec.mdPath
+      : rec.dir
+        ? 'in your Downloads folder at ' + rec.dir + '/feedback.md'
+        : '(in your Downloads/ai-feedback folder)';
     return (
       'I recorded visual + spoken feedback on my web app. Please read the feedback file and ' +
       'address each item. Screenshots are referenced relative to the file, in the same folder.\n\n' +
-      'Feedback file: ' + (rec.mdPath || '(in your Downloads/ai-feedback folder)')
+      'Feedback file: ' + path
     );
   }
   function openRecordings(id) {
