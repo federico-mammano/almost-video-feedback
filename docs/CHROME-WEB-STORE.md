@@ -62,6 +62,8 @@ https://justinwi.github.io/almost-video-feedback/privacy.html
 
 Open source (MIT) and dependency-free — read every line at
 https://github.com/JustinWi/almost-video-feedback
+
+Made by teachinge.org — https://teachinge.org
 ```
 
 **Single purpose** (the dashboard asks for one)
@@ -133,24 +135,28 @@ Answer truthfully — these are the expected answers for this extension:
 
 ## Images you need (sizes)
 
-The store requires **at least one screenshot**; the rest are recommended.
+**✅ Three ready-to-upload 1280×800 product screenshots are already in [`docs/store/`](store/):**
+1. `01-record-on-your-app.png` — the recording overlay on a real-looking dashboard.
+2. `02-recordings-library.png` — the recordings library with screenshots + transcript.
+3. `03-control-center.png` — the toolbar popup (recent recordings, saved result).
 
-| Asset | Size | Required? |
+Just upload those. (They're real renders of the extension's UI.)
+
+| Asset | Size | Status |
 |---|---|---|
-| Store icon | 128×128 | ✅ (in package) |
-| Screenshot(s) | 1280×800 (or 640×400), PNG/JPEG, up to 5 | ✅ at least 1 |
-| Small promo tile | 440×280 | recommended |
-| Marquee promo | 1400×560 | optional |
+| Store icon | 128×128 | ✅ in package |
+| Screenshots | 1280×800 | ✅ 3 in `docs/store/` |
+| Small promo tile | 440×280 | optional — see below |
+| Marquee promo | 1400×560 | optional — see below |
 
-**Quickest path:** open `docs/store-assets.html`, set browser zoom to 100%, and screenshot each
-labeled frame (they're sized exactly). For real product shots, you can also screenshot the popup, the
-on-page recording bar, and the Recordings page (1280×800 window works well).
+For the optional promo tiles, open `docs/store-assets.html`, set browser zoom to 100%, and screenshot
+the 440×280 / 1400×560 frames.
 
 ---
 
 ## Your checklist (the parts only you can do)
 
-1. **Register** at the [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/devconsole/) — one-time **$5** fee with a Google account.
+1. **Register** at the [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/devconsole/) signed in as **justin@teachinge.org** — one-time **$5** fee. (If the console is blocked, enable the Chrome Web Store developer console for your domain in the [Google Admin console](https://admin.google.com) — you own it.) Set the **publisher display name** to **teachinge.org**.
 2. Click **New item** → upload **`dist/almost-video-feedback-store.zip`**.
 3. Fill **Store listing**: paste the Name, Summary, Description, Category, Language above; add the icon (auto from package), screenshots + promo tile (from `store-assets.html`), and the **homepage** URL.
 4. Fill **Privacy practices**: paste the **single purpose**, the **permission justifications**, set **remote code = No**, the **privacy policy URL**, and the **data-use** answers above.
