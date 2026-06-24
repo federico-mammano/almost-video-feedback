@@ -52,8 +52,8 @@
   // autocircle + pen bookkeeping
   let moveBuf = [];
   let lastCircleAt = 0;
-  let lastRightClickAt = 0;
   let rightMoved = 0;
+  const DRAG_PX = 8; // right-movement beyond this counts as a draw, not a click
 
   const nowMs = () => performance.now();
   const handlers = [];
@@ -339,25 +339,17 @@
 
   function onUp(e) {
     if (mode !== 'pen' || e.button !== 2) return;
-    const t = nowMs();
-    if (rightMoved < 8) {
-      // a right-click, not a drag: double-right-click clears the board
-      if (t - lastRightClickAt < 450) {
-        strokes = [];
-        lastRightClickAt = 0;
-      } else {
-        lastRightClickAt = t;
-      }
-      curStroke = null;
-    } else {
-      if (curStroke && curStroke.length >= 2) strokes.push(curStroke);
-      curStroke = null;
-    }
+    // a real drag becomes a stroke; a plain right-click is left alone (so its
+    // native context menu fires — see onContextMenu)
+    if (rightMoved >= DRAG_PX && curStroke && curStroke.length >= 2) strokes.push(curStroke);
+    curStroke = null;
     kick();
   }
 
   function onContextMenu(e) {
-    if (mode === 'pen') e.preventDefault(); // so right-drag can draw
+    // only swallow the menu when the user actually drew; a single right-click
+    // still gets the page's normal context menu
+    if (mode === 'pen' && rightMoved >= DRAG_PX) e.preventDefault();
   }
 
   function attach() {
@@ -377,6 +369,14 @@
     if (ctx) ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
     kick();
     return mode;
+  }
+
+  // Wipe the pen drawing (the persistent strokes). Other modes self-clear.
+  function clear() {
+    strokes = [];
+    curStroke = null;
+    if (ctx) ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+    kick();
   }
 
   function start(initialMode, col) {
@@ -403,7 +403,7 @@
     mode = 'off';
   }
 
-  const api = { start, stop, setMode, MODES, MODE_IDS };
+  const api = { start, stop, setMode, clear, MODES, MODE_IDS };
   const root = typeof globalThis !== 'undefined' ? globalThis : self;
   root.SCF_ANNOTATE = api;
 })();

@@ -46,6 +46,7 @@
   let shotsEl = null;
   let miniEl = null;
   let modePickEl = null;
+  let clearInkEl = null;
   let timerInt = null;
 
   // overlay UI state
@@ -131,6 +132,7 @@
       }
     }
     if (modePickEl && modePickEl.value !== mode) modePickEl.value = mode;
+    if (clearInkEl) clearInkEl.classList.toggle('is-hidden', mode !== 'pen');
     // persist so the choice sticks into the next recording
     try {
       chrome.storage.local.get('settings', (got) => {
@@ -202,6 +204,16 @@
       }
       modePickEl.value = cfg.annotateMode || 'off';
       modePickEl.addEventListener('change', () => applyAnnotateMode(modePickEl.value));
+
+      // clear button — only meaningful (and only shown) in pen mode
+      clearInkEl = document.createElement('button');
+      clearInkEl.className = 'clearink';
+      clearInkEl.textContent = '⌫';
+      clearInkEl.title = 'Clear the pen drawing';
+      clearInkEl.addEventListener('click', () => {
+        if (annotate && annotate.clear) annotate.clear();
+      });
+      clearInkEl.classList.toggle('is-hidden', (cfg.annotateMode || 'off') !== 'pen');
     }
 
     const btns = document.createElement('div');
@@ -226,6 +238,7 @@
 
     panelEl.append(grip, sep, textEl);
     if (modePickEl) panelEl.append(modePickEl);
+    if (clearInkEl) panelEl.append(clearInkEl);
     panelEl.append(btns);
     shadow.appendChild(panelEl);
     (document.documentElement || document.body).appendChild(hostEl);
@@ -248,7 +261,7 @@
 
   function destroyOverlay() {
     if (hostEl && hostEl.parentNode) hostEl.parentNode.removeChild(hostEl);
-    hostEl = panelEl = textEl = timerEl = shotsEl = miniEl = modePickEl = null;
+    hostEl = panelEl = textEl = timerEl = shotsEl = miniEl = modePickEl = clearInkEl = null;
   }
 
   function panelSize() {

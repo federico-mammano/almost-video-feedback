@@ -113,6 +113,9 @@
   .modepick option { color: #111; background: #fff; }
   .panel.minimized .modepick { display: none; }
 
+  .clearink.is-hidden { display: none !important; }
+  .panel.minimized .clearink { display: none !important; }
+
   /* minimized: just the grip (dot + timer + shots) + expand button */
   .panel.minimized .sep,
   .panel.minimized .text,

@@ -46,9 +46,10 @@ Start ▶  →  talk + point at things  →  Stop ⏹  →  paste into your agen
 - **Pointer annotations** *(experimental)*: optionally draw on the page while you record so the AI
   can see what you're pointing at — the marks are painted into the page, so they show up in the
   screenshots. Pick a mode from the overlay dropdown (switchable live): **comet/glow trail** (a neon
-  trail follows the cursor so you can circle things), **pen** (right-drag to draw, double right-click
-  to clear), **auto-circle** (circle the cursor and it draws a ring), **spotlight** (dim everything
-  but the cursor), or **click ripple**. Off by default.
+  trail follows the cursor so you can circle things), **pen** (right-drag to draw; a plain right-click
+  still opens the page's normal menu; the **⌫** button on the overlay clears), **auto-circle** (circle
+  the cursor and it draws a ring), **spotlight** (dim everything but the cursor), or **click ripple**.
+  Off by default.
 - **Mic meter**: the popup shows a live microphone level so you can confirm audio is being picked up.
 - **Correlation**: everything is one timestamped timeline (speech, screenshots, navigations),
   persisted to IndexedDB as it happens. On stop, each spoken segment is attached to the nearest
