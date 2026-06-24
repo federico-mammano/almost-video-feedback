@@ -35,7 +35,6 @@
   };
   const annotate = self.SCF_ANNOTATE || null;
   let annotateCaptureTimer = null;
-  let annotHintsLeft = 0; // first few draws get a "double-click to clear" hint
 
   let recording = false;
   let startedAt = 0;
@@ -110,33 +109,19 @@
   function showClearBtn(show) {
     if (clearInkEl) clearInkEl.classList.toggle('is-hidden', !show);
   }
-  function scheduleAnnotateCapture() {
+  function onAnnotated() {
     // capture once the drawing settles so the shot includes the finished mark
     clearTimeout(annotateCaptureTimer);
     annotateCaptureTimer = setTimeout(() => {
       if (recording) requestCapture(TRIGGER.ANNOTATE, withPage({}));
     }, 600);
   }
-  function onAnnotated() {
-    scheduleAnnotateCapture();
-    if (annotHintsLeft > 0 && annotate) {
-      annotHintsLeft -= 1;
-      try {
-        annotate.flashHint('Double ' + (annotate.SECONDARY_LABEL || 'right-click') + ' to clear');
-      } catch (e) {
-        /* ignore */
-      }
-      try {
-        chrome.storage.local.set({ annotHintsLeft });
-      } catch (e) {
-        /* ignore */
-      }
-    }
-  }
   function startAnnotate() {
     if (!annotate || cfg.annotate === false) return;
     try {
-      annotate.onInkChange(showClearBtn);
+      // report this (top) frame's ink to the SW, which aggregates across every
+      // frame and tells us whether to show the clear button (ANNOTATE_INK_ANY)
+      annotate.onInkChange((has) => send({ type: MSG.ANNOTATE_INK, hasInk: has }));
       annotate.onAnnotated(onAnnotated);
       annotate.start(cfg.annotateColor || '#ff2d95');
     } catch (e) {
@@ -205,7 +190,7 @@
       clearInkEl.textContent = '⌫';
       clearInkEl.title = 'Clear the drawing';
       clearInkEl.addEventListener('click', () => {
-        if (annotate && annotate.clear) annotate.clear();
+        send({ type: MSG.CLEAR_ANNOTATIONS }); // clears every frame via the SW
       });
       if (annotate.hasInk && annotate.hasInk()) clearInkEl.classList.remove('is-hidden');
     }
@@ -636,14 +621,6 @@
     lastScrollCaptureY = window.scrollY || 0;
     lastRouteUrl = location.href;
     recLang = (cfg.language || 'en-US');
-    // first few drawings get a "double-click to clear" hint
-    try {
-      chrome.storage.local.get('annotHintsLeft', (got) => {
-        annotHintsLeft = got && typeof got.annotHintsLeft === 'number' ? got.annotHintsLeft : 3;
-      });
-    } catch (e) {
-      annotHintsLeft = 3;
-    }
     if (cfg.showOverlay !== false) buildOverlay();
     startAnnotate();
     startTimer();
@@ -760,6 +737,13 @@
         // no flashing toast — just bump the static counter in the bar
         shotCount = msg.seq || shotCount + 1;
         updateShots();
+        break;
+      case MSG.ANNOTATE_INK_ANY:
+        // any frame (this one or an iframe) has a drawing -> show the clear button
+        showClearBtn(!!msg.any);
+        break;
+      case MSG.CLEAR_ANNOTATIONS:
+        if (annotate && annotate.clear) annotate.clear();
         break;
       default:
         break;

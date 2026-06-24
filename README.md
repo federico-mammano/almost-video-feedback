@@ -45,10 +45,11 @@ Start ▶  →  talk + point at things  →  Stop ⏹  →  paste into your agen
   it out of a screenshot. The canonical "recording" state is also shown in the toolbar badge (a red ●).
 - **On-page drawing** (telestrator): on by default — **right-click and drag** to draw on the page in
   neon pink so the AI can see what you're pointing at (on macOS it's **Control-click and drag**, since
-  two-finger trackpad drag is scrolling). The marks are painted into the page, so they show up in the
-  screenshots, and a screenshot is captured after each drawing. A plain right-click still opens the
-  page's normal menu; **double right-click** — or the **⌫** button that appears on the overlay — clears.
-  Turn it off in Settings.
+  two-finger trackpad drag is scrolling). Works **over embedded iframes** too (each frame draws over its
+  own area). The marks are painted into the page, so they show up in the screenshots, and a screenshot
+  is captured after each drawing. A plain right-click still opens the page's normal menu; **double
+  right-click** — or the **⌫** button that appears on the overlay — clears (every frame). Turn it off in
+  Settings.
 - **Mic meter**: the popup shows a live microphone level so you can confirm audio is being picked up.
 - **Correlation**: everything is one timestamped timeline (speech, screenshots, navigations),
   persisted to IndexedDB as it happens. On stop, each spoken segment is attached to the nearest
@@ -114,7 +115,9 @@ or telemetry. The extension makes **no network requests of its own** (independen
   behavior. (A future release may add an offline/remote engine you can choose.)
 - **Permissions:** it requests broad permissions because it has to work on *any* site you review —
   `<all_urls>` (inject the overlay + read the page you're reviewing), screenshot the active tab, the
-  microphone, downloads, and local storage. It only acts on the tab you're actively recording.
+  microphone, downloads, and local storage. It only acts on the tab you're actively recording. The
+  lightweight **drawing layer** (a canvas you draw on) is also injected into sub-frames/iframes so you
+  can draw over embedded content; like the rest of the extension it makes no network requests.
 - **Reviewing untrusted pages:** `feedback.md` includes text copied from the page (URLs, element
   labels, your selections). If you record on a page with attacker-controlled content, that text ends
   up in the file you paste into your AI agent — so treat the output as you would any untrusted input,

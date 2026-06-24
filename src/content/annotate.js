@@ -16,6 +16,8 @@
  */
 (function () {
   'use strict';
+  const root = typeof globalThis !== 'undefined' ? globalThis : self;
+  if (root.SCF_ANNOTATE) return; // already injected in this frame (top frame loads it twice)
 
   const IS_MAC = /Mac|iPhone|iPad/i.test(navigator.platform || navigator.userAgent || '');
   const SECONDARY_LABEL = IS_MAC ? 'Control-click' : 'right-click';
@@ -194,6 +196,26 @@
     }, 2200);
   }
 
+  // Show the "double-click to clear" hint for the first few drawings ever. The
+  // counter is shared storage so the budget is roughly global across frames.
+  function maybeHint() {
+    try {
+      chrome.storage.local.get('annotHintsLeft', (got) => {
+        let left = got && typeof got.annotHintsLeft === 'number' ? got.annotHintsLeft : 3;
+        if (left <= 0) return;
+        left -= 1;
+        flashHint('Double ' + SECONDARY_LABEL + ' to clear');
+        try {
+          chrome.storage.local.set({ annotHintsLeft: left });
+        } catch (e) {
+          /* ignore */
+        }
+      });
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
   // ----------------------------------------------------------------- input
 
   function emitInk() {
@@ -235,6 +257,7 @@
       strokes.push(curStroke);
       curStroke = null;
       emitInk();
+      maybeHint();
       if (onDraw) {
         try {
           onDraw();
@@ -335,6 +358,47 @@
       return strokes.length > 0;
     },
   };
-  const root = typeof globalThis !== 'undefined' ? globalThis : self;
   root.SCF_ANNOTATE = api;
+
+  // ----------------------------------------------------- sub-frame bootstrap
+  // In an iframe there is no overlay / content.js, so wire the drawing layer
+  // straight to the service worker: start/stop with the session, report ink, and
+  // request a capture after a drawing. The top frame is driven by content.js.
+  if (window.top !== window.self) {
+    const SCF = root.SCF || {};
+    const MSG = SCF.MSG || {};
+    const TRIGGER = SCF.TRIGGER || {};
+    let capTimer = null;
+    const sx = (m) => {
+      try {
+        chrome.runtime.sendMessage(m, () => void chrome.runtime.lastError);
+      } catch (e) {
+        /* SW not ready */
+      }
+    };
+
+    api.onInkChange((has) => sx({ type: MSG.ANNOTATE_INK, hasInk: has }));
+    api.onAnnotated(() => {
+      clearTimeout(capTimer);
+      capTimer = setTimeout(() => {
+        sx({ type: MSG.REQUEST_CAPTURE, trigger: TRIGGER.ANNOTATE, meta: { url: location.href, title: document.title } });
+      }, 600);
+    });
+
+    chrome.runtime.onMessage.addListener((msg) => {
+      if (!msg || !msg.type) return;
+      if (msg.type === MSG.SESSION_STARTED) {
+        if (!msg.settings || msg.settings.annotate !== false) {
+          api.start(msg.settings && msg.settings.annotateColor);
+        }
+      } else if (msg.type === MSG.SESSION_STOPPED) {
+        api.stop();
+      } else if (msg.type === MSG.CLEAR_ANNOTATIONS) {
+        api.clear();
+      }
+    });
+
+    // we may have loaded after the session already started -> ask the SW
+    sx({ type: MSG.ANNOTATE_READY });
+  }
 })();

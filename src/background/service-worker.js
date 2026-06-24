@@ -29,6 +29,7 @@ let transcriptOpen = false;
 let stopping = false; // true while a stop is saving/exporting (popup shows "Saving…")
 let starting = false; // true between a start request and session becoming active (debounces icon double-clicks)
 let recoverPromise = null; // resolves once mid-session state has been restored
+const inkFrames = new Set(); // frameIds (this tab) that currently have a drawing
 
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -59,6 +60,16 @@ function notifyContent(tabId, msg) {
   if (tabId == null) return;
   try {
     chrome.tabs.sendMessage(tabId, msg, () => void chrome.runtime.lastError);
+  } catch (e) {
+    /* no receiver */
+  }
+}
+
+// Send to one specific frame in a tab (e.g. re-arm a single late-loading iframe).
+function notifyFrame(tabId, frameId, msg) {
+  if (tabId == null || frameId == null) return;
+  try {
+    chrome.tabs.sendMessage(tabId, msg, { frameId }, () => void chrome.runtime.lastError);
   } catch (e) {
     /* no receiver */
   }
@@ -230,6 +241,7 @@ async function startRecording(requestedTabId) {
   capture.begin({ windowId: tab.windowId, tabId: tab.id, settings, lastUrl: tab.url, lastTitle: tab.title, startedAt });
   capture.hooks.onKept = () => broadcastStatus();
   transcriptOpen = true;
+  inkFrames.clear();
 
   // Screenshots are written to Downloads during the recording (so stop is fast);
   // hide the download shelf for the whole session so it doesn't pop up repeatedly.
@@ -354,6 +366,7 @@ async function stopRecording(opts) {
   setBadge('idle');
   session = null;
   stopping = false;
+  inkFrames.clear();
   applyActionMode(); // idle -> clicking the icon starts the next recording
 
   // in-page toast so the user knows it's ready even if the popup didn't open /
@@ -588,6 +601,36 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     case MSG.REQUEST_CAPTURE:
       if (session && session.active && sender.tab && sender.tab.id === session.tabId) {
         capture.request(msg.trigger, msg.meta || {});
+      }
+      return false;
+
+    // ---- drawing across frames ----
+    case MSG.ANNOTATE_READY:
+      // a drawing-capable (sub)frame loaded; if a session is live, tell just that
+      // frame to start (targeted so it doesn't reset the top frame's state)
+      if (session && session.active && sender.tab && sender.tab.id === session.tabId && sender.frameId) {
+        notifyFrame(session.tabId, sender.frameId, {
+          type: MSG.SESSION_STARTED,
+          settings: session.settings,
+          startedAt: session.startedAt,
+        });
+      }
+      return false;
+
+    case MSG.ANNOTATE_INK:
+      if (session && session.active && sender.tab && sender.tab.id === session.tabId) {
+        const fid = sender.frameId || 0;
+        if (msg.hasInk) inkFrames.add(fid);
+        else inkFrames.delete(fid);
+        notifyContent(session.tabId, { type: MSG.ANNOTATE_INK_ANY, any: inkFrames.size > 0 });
+      }
+      return false;
+
+    case MSG.CLEAR_ANNOTATIONS:
+      if (session && session.active && sender.tab && sender.tab.id === session.tabId) {
+        inkFrames.clear();
+        notifyContent(session.tabId, { type: MSG.CLEAR_ANNOTATIONS }); // every frame clears
+        notifyContent(session.tabId, { type: MSG.ANNOTATE_INK_ANY, any: false });
       }
       return false;
 

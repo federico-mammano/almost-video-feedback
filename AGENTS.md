@@ -97,7 +97,7 @@ README's install link points at `/releases/latest`).
 | Storage (live + history) | `src/background/session-store.js` (IndexedDB) |
 | Output | `src/background/exporter.js`, `downloads.js`, `src/common/zip.js` |
 | Transcription + overlay + input | `src/content/*` (Web Speech runs here, **not** in the offscreen doc) |
-| Pointer annotations (canvas) | `src/content/annotate.js` (`SCF_ANNOTATE`; drawn into the page so it lands in shots) |
+| On-page drawing (canvas) | `src/content/annotate.js` (`SCF_ANNOTATE`; drawn into the page so it lands in shots). Injected in **all frames** via a 2nd `content_scripts` entry — in sub-frames it self-drives off SW messages (`ANNOTATE_READY`/`SESSION_STARTED`/`CLEAR_ANNOTATIONS`); the top frame is driven by `content.js`. |
 | Clipboard | `src/offscreen/*` |
 | UI | `src/popup/*`, `src/options/*`, `src/history/*` |
 | Shared | `src/common/protocol.js`, `config.js` |

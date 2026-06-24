@@ -40,6 +40,12 @@
     OFFSCREEN_START: 'offscreen_start',
     OFFSCREEN_STOP: 'offscreen_stop',
 
+    // drawing across frames (the top frame + any same-tab iframes)
+    ANNOTATE_READY: 'annotate_ready', // a drawing-capable (sub)frame asks if a session is live
+    ANNOTATE_INK: 'annotate_ink', // a frame reports whether it currently has a drawing
+    ANNOTATE_INK_ANY: 'annotate_ink_any', // SW -> top frame: does any frame have a drawing
+    CLEAR_ANNOTATIONS: 'clear_annotations', // clear drawings in every frame
+
     // service worker <-> recognizer iframe (Web Speech at the extension origin)
     RECOGNIZER_STOP: 'recognizer_stop',
     TRANSCRIPT_SEGMENT: 'transcript_segment',
