@@ -37,11 +37,13 @@
   let annotateCaptureTimer = null;
 
   let recording = false;
+  let micListening = false; // true once the recognizer is actually capturing audio
 
   // overlay refs
   let hostEl = null;
   let panelEl = null;
   let textEl = null;
+  let recLabelEl = null;
   let shotsEl = null;
   let miniEl = null;
   let clearInkEl = null;
@@ -165,6 +167,7 @@
     const recLabel = document.createElement('span');
     recLabel.className = 'reclabel';
     recLabel.textContent = 'REC';
+    recLabelEl = recLabel;
     shotsEl = document.createElement('span');
     shotsEl.className = 'shots';
     shotsEl.textContent = '📸 0';
@@ -228,12 +231,22 @@
     }
     applyPosition();
     updateShots();
+    applyMicState();
+  }
+
+  // Until the recognizer reports it's actually capturing audio, the bar shows a
+  // "starting microphone…" state (spinner) instead of the live recording UI, so it
+  // never looks like we're recording before the mic is on.
+  function applyMicState() {
+    const starting = !micListening && !micErrorMsg;
+    if (panelEl) panelEl.classList.toggle('starting', starting);
+    if (recLabelEl) recLabelEl.textContent = micErrorMsg ? '⚠' : micListening ? 'REC' : 'Starting…';
     renderTranscript();
   }
 
   function destroyOverlay() {
     if (hostEl && hostEl.parentNode) hostEl.parentNode.removeChild(hostEl);
-    hostEl = panelEl = textEl = shotsEl = miniEl = clearInkEl = null;
+    hostEl = panelEl = textEl = recLabelEl = shotsEl = miniEl = clearInkEl = null;
   }
 
   function panelSize() {
@@ -335,7 +348,8 @@
       return;
     }
     if (!finalText && !interimText) {
-      textEl.innerHTML = '<span class="placeholder">Listening… speak your feedback</span>';
+      const ph = micListening ? 'Listening… speak your feedback' : 'Starting microphone…';
+      textEl.innerHTML = '<span class="placeholder">' + ph + '</span>';
       return;
     }
     const tail = finalText.slice(-400);
@@ -594,6 +608,7 @@
       cfg.triggers = Object.assign({}, DEFAULT_TRIGGERS, msg.settings.triggers || {});
     }
     recording = true;
+    micListening = false; // show "starting microphone…" until the recognizer is live
     // a re-armed overlay (followed focus to a new window, or a navigation) gets
     // the transcript so far, so it doesn't look like we lost what you said
     finalText = msg.transcript || '';
@@ -703,16 +718,24 @@
       case MSG.SAVED_NOTICE:
         showSavedToast();
         break;
+      case MSG.MIC_LISTENING:
+        if (!micListening) {
+          micListening = true;
+          applyMicState();
+        }
+        break;
       case MSG.TRANSCRIPT_UPDATE:
         if (msg.micError) {
           micErrorMsg = '⚠️ Microphone blocked — allow it for the extension, then restart recording.';
+          applyMicState();
         } else if (msg.final) {
           finalText += (finalText ? ' ' : '') + msg.text;
           interimText = '';
+          renderTranscript();
         } else {
           interimText = msg.text;
+          renderTranscript();
         }
-        renderTranscript();
         break;
       case MSG.SCREENSHOT_TOAST:
         // no flashing toast — just bump the static counter in the bar

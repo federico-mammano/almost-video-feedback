@@ -38,6 +38,12 @@
     r.lang = lang;
     r.onstart = () => {
       running = true;
+      post({ type: MSG.MIC_LISTENING });
+    };
+    // fires once the user agent actually starts capturing audio — the truest
+    // "we're listening now" signal for the overlay
+    r.onaudiostart = () => {
+      post({ type: MSG.MIC_LISTENING });
     };
     r.onresult = (event) => {
       let interim = '';

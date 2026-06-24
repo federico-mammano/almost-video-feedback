@@ -54,6 +54,18 @@
     70%  { box-shadow: 0 0 0 9px rgba(244,63,94,0); }
     100% { box-shadow: 0 0 0 0 rgba(244,63,94,0); }
   }
+
+  /* "starting microphone…" state — a spinner instead of the red REC dot */
+  .panel.starting .dot {
+    box-sizing: border-box;
+    background: transparent;
+    border: 2px solid rgba(255,255,255,.22);
+    border-top-color: #f59e0b;
+    box-shadow: none;
+    animation: scfspin .7s linear infinite;
+  }
+  .panel.starting .reclabel { color: #fcd34d; }
+  @keyframes scfspin { to { transform: rotate(360deg); } }
   .shots { font-size: 11.5px; opacity: .75; }
 
   .sep { width:1px; height:22px; background: rgba(255,255,255,.14); flex:0 0 auto; }

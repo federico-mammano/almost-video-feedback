@@ -665,6 +665,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
       return false;
 
+    case MSG.MIC_LISTENING:
+      // the recognizer iframe is now capturing audio -> tell the overlay to switch
+      // from "starting microphone…" to the live recording UI
+      if (session && session.active && sender.tab && sender.tab.id === session.tabId) {
+        notifyContent(session.tabId, { type: MSG.MIC_LISTENING });
+      }
+      return false;
+
     // ---- from offscreen ----
     case MSG.OFFSCREEN_READY:
       return false;

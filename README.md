@@ -96,8 +96,10 @@ Requires Chrome 116+.
 
 Transcription runs in a hidden **extension-origin iframe**, so you grant the microphone to the
 extension **once** (Chrome's prompt the first time you record, or via the toolbar popup's mic meter)
-and it's reused on every site — no per-website prompts. If recording shows a "microphone blocked"
-hint, open the toolbar popup once to grant it, then start again.
+and it's reused on every site — no per-website prompts. When you start, the overlay shows a
+**"Starting microphone…"** spinner and only switches to the live **REC** state once the recognizer is
+actually capturing audio — so it never looks like it's recording before the mic is on. If recording
+shows a "microphone blocked" hint, open the toolbar popup once to grant it, then start again.
 
 ## Privacy & security
 

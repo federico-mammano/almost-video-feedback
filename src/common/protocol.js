@@ -50,6 +50,7 @@
     RECOGNIZER_STOP: 'recognizer_stop',
     TRANSCRIPT_SEGMENT: 'transcript_segment',
     TRANSCRIBE_ERROR: 'transcribe_error',
+    MIC_LISTENING: 'mic_listening', // recognizer is actually capturing audio now
     COPY_TO_CLIPBOARD: 'copy_to_clipboard',
     KEEPALIVE: 'keepalive',
   };
