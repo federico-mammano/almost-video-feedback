@@ -90,37 +90,39 @@
 
     let seq = 0;
     let lastHash = null;
-    for (let i = 0; i < targets.length; i++) {
-      const ms = targets[i];
-      onProgress({ done: i, total: targets.length, phase: 'capturing' });
-      const seek = await sendToTab(tabId, { type: MSG.LOOM_SEEK, ms }, 4000);
-      await delay(settle);
-      let dataUrl;
-      try { dataUrl = await chrome.tabs.captureVisibleTab(windowId, opts); } catch (e) { dataUrl = null; }
-      if (!dataUrl) continue; // tab not foreground / capture failed -> skip this target
-      const rect = seek && seek.ok ? seek.rect : null;
-      const dpr = seek && seek.ok ? (seek.dpr || 1) : 1;
-      const blob = await cropToRect(dataUrl, rect, dpr, mime);
+    try {
+      for (let i = 0; i < targets.length; i++) {
+        const ms = targets[i];
+        onProgress({ done: i, total: targets.length, phase: 'capturing' });
+        const seek = await sendToTab(tabId, { type: MSG.LOOM_SEEK, ms }, 4000);
+        await delay(settle);
+        let dataUrl;
+        try { dataUrl = await chrome.tabs.captureVisibleTab(windowId, opts); } catch (e) { dataUrl = null; }
+        if (!dataUrl) continue; // tab not foreground / capture failed -> skip this target
+        const rect = seek && seek.ok ? seek.rect : null;
+        const dpr = seek && seek.ok ? (seek.dpr || 1) : 1;
+        const blob = await cropToRect(dataUrl, rect, dpr, mime);
 
-      const hash = await hashOf(blob);
-      if (hash && lastHash && imageHash.hammingDistance(lastHash, hash) <= threshold) continue; // unchanged -> cull
-      if (hash) lastHash = hash;
+        const hash = await hashOf(blob);
+        if (hash && lastHash && imageHash.hammingDistance(lastHash, hash) <= threshold) continue; // unchanged -> cull
+        if (hash) lastHash = hash;
 
-      seq += 1;
-      await store.addScreenshot(seq, blob, mime);
-      await store.addEvent({
-        t: startedAt + ms, type: 'screenshot', seq, mime,
-        trigger: TRIGGER.FRAME, url, title, element: null, selectionText: null, scrollY: null, hash: hash || null,
-      });
-      if (dir && downloads && exporter) downloads.saveShot(dir, exporter.fileFor(seq), blob, mime).catch(() => {});
+        seq += 1;
+        await store.addScreenshot(seq, blob, mime);
+        await store.addEvent({
+          t: startedAt + ms, type: 'screenshot', seq, mime,
+          trigger: TRIGGER.FRAME, url, title, element: null, selectionText: null, scrollY: null, hash: hash || null,
+        });
+        if (dir && downloads && exporter) downloads.saveShot(dir, exporter.fileFor(seq), blob, mime).catch(() => {});
+      }
+
+      // transcript events (final segments) on the same timeline
+      for (const s of segments) {
+        if (s.text && s.text.trim()) await store.addEvent({ t: startedAt + s.ms, type: 'transcript', final: true, text: s.text.trim() });
+      }
+    } finally {
+      await sendToTab(tabId, { type: MSG.LOOM_SEEK, restore: true }, 1000); // un-mute, restore controls
     }
-
-    // transcript events (final segments) on the same timeline
-    for (const s of segments) {
-      if (s.text && s.text.trim()) await store.addEvent({ t: startedAt + s.ms, type: 'transcript', final: true, text: s.text.trim() });
-    }
-
-    await sendToTab(tabId, { type: MSG.LOOM_SEEK, restore: true }, 1000); // un-mute, restore controls
     onProgress({ done: targets.length, total: targets.length, phase: 'done' });
     // lastMs = end of the video we covered, so the bundle's duration is meaningful
     const lastTarget = targets.length ? targets[targets.length - 1] : 0;

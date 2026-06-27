@@ -357,8 +357,13 @@
     btn.disabled = true;
     $('import-progress').hidden = false;
     $('import-progress').textContent = 'Reading transcript…';
-    await send({ type: MSG.IMPORT_LOOM, tabId: loomTab.id });
-    // export_done (or a STATUS error) will refresh the UI
+    const resp = await send({ type: MSG.IMPORT_LOOM, tabId: loomTab.id });
+    // success arrives via the export_done broadcast; on failure, un-stick the UI here
+    if (!resp || resp.error || !resp.mdPath) {
+      $('import-progress').hidden = true;
+      btn.disabled = false;
+      detectLoom();
+    }
   });
   $('copy').addEventListener('click', async () => {
     await send({ type: MSG.COPY_LAST });

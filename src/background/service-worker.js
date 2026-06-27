@@ -209,7 +209,7 @@ async function ensureContentScript(tabId) {
 // ------------------------------------------------------------ session flow
 
 async function startRecording(requestedTabId) {
-  if (starting || (session && session.active)) return statePayload();
+  if (importing || starting || (session && session.active)) return statePayload();
   starting = true;
 
   let tab;
