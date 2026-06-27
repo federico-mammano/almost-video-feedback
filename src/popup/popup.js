@@ -3,6 +3,20 @@
   const { MSG } = self.SCF;
   const $ = (id) => document.getElementById(id);
 
+  function isLoomShareUrl(url) {
+    try { const u = new URL(url); return /(^|\.)loom\.com$/i.test(u.hostname) && /\/share\//.test(u.pathname); }
+    catch (e) { return false; }
+  }
+  let loomTab = null; // the active tab if it's an importable Loom share page
+  async function detectLoom() {
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+      loomTab = tab && isLoomShareUrl(tab.url) ? tab : null;
+    } catch (e) { loomTab = null; }
+    const btn = $('import-loom');
+    if (btn) btn.hidden = !(loomTab && !state.recording && !state.saving);
+  }
+
   let state = { recording: false, screenshots: 0, startedAt: null, lastResult: null };
   let lastError = '';
   let recentCount = 0;
@@ -314,6 +328,7 @@
     }
     render();
     loadRecent();
+    detectLoom();
   }
 
   // primary button
@@ -334,6 +349,17 @@
   });
 
   $('force').addEventListener('click', () => send({ type: MSG.FORCE_SHOT }));
+
+  $('import-loom').addEventListener('click', async () => {
+    if (!loomTab) return;
+    lastError = '';
+    const btn = $('import-loom');
+    btn.disabled = true;
+    $('import-progress').hidden = false;
+    $('import-progress').textContent = 'Reading transcript…';
+    await send({ type: MSG.IMPORT_LOOM, tabId: loomTab.id });
+    // export_done (or a STATUS error) will refresh the UI
+  });
   $('copy').addEventListener('click', async () => {
     await send({ type: MSG.COPY_LAST });
     const btn = $('copy');
@@ -365,12 +391,22 @@
       state.lastResult = s.lastResult || state.lastResult;
       if (msg.error) lastError = msg.error;
       render();
+    } else if (msg.type === MSG.IMPORT_PROGRESS) {
+      const p = msg.progress || {};
+      const el = $('import-progress');
+      el.hidden = false;
+      el.textContent = p.phase === 'done'
+        ? 'Building bundle…'
+        : 'Capturing frame ' + ((p.done || 0) + 1) + ' / ' + (p.total || '?') + '…';
     } else if (msg.type === 'export_done') {
       state.saving = false;
       state.recording = false;
       state.lastResult = msg.result;
       render();
       loadRecent(); // a new recording was just archived
+      $('import-progress').hidden = true;
+      $('import-loom').disabled = false;
+      detectLoom();
     }
   });
 
