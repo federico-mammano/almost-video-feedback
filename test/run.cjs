@@ -227,6 +227,12 @@ test('relTime formats mm:ss and h:mm:ss', () => {
   assert.strictEqual(exporter.relTime(3661000), '1:01:01');
 });
 
+test('frame trigger renders a video-frame label', () => {
+  const ev = [{ id: 1, t: 1000, type: 'screenshot', seq: 1, trigger: 'frame', url: 'https://www.loom.com/share/abc', title: 'Demo' }];
+  const r = exporter.build(ev, { startedAt: 1000, endedAt: 1000, startedAtText: 'x' });
+  assert.ok(r.markdown.includes('🎞️ Video frame'), 'frame label rendered');
+});
+
 test('empty session still builds', () => {
   const r = exporter.build([], {});
   assert.ok(typeof r.markdown === 'string' && r.markdown.length > 0);
